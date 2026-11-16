@@ -1,0 +1,63 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android project files
+        run: |
+          flutter --version
+          if [ ! -d android ]; then
+            flutter create --org pl.tabulo --project-name tabulo --platforms android /tmp/gen
+            cp -r /tmp/gen/android ./android
+          fi
+          for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            cp branding/mipmap-$d/ic_launcher.png android/app/src/main/res/mipmap-$d/ic_launcher.png
+          done
+          sed -i 's/android:label="tabulo"/android:label="Tabulo"/' android/app/src/main/AndroidManifest.xml
+
+      - name: Get packages
+        run: flutter pub get
+
+      - name: Analyze (report only)
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings || true
+
+      - name: Build APK
+        run: |
+          flutter build apk --release
+          cp build/app/outputs/flutter-apk/app-release.apk tabulo-test.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tabulo-apk
+          path: tabulo-test.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Tabulo – wersja testowa ${{ github.run_number }}
+          body: |
+            Testowa wersja Tabulo do zainstalowania na telefonie z Androidem.
+            Pobierz plik tabulo-test.apk na telefonie i otwórz go, aby zainstalować.
+          files: tabulo-test.apk
