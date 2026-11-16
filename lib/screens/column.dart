@@ -353,7 +353,9 @@ class _ColumnScreenState extends State<ColumnScreen> {
             borderRadius: BorderRadius.circular(small ? 10 : 16),
             border: Border.all(color: border, width: sel || _checked ? 3 : 2),
           ),
-          child: Text(v, style: ts(small ? 20 : 38, color: fg)),
+          child: Text(v,
+              textScaler: TextScaler.noScaling,
+              style: ts(small ? 20 : 38, color: fg, height: 1.0).copyWith(leadingDistribution: TextLeadingDistribution.even)),
         ),
       );
     }

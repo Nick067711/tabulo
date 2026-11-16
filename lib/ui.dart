@@ -560,14 +560,16 @@ class TaskLine extends StatelessWidget {
             borderRadius: BorderRadius.circular(size * 0.4),
             border: Border.all(color: boxColor, width: 4),
           ),
-          child: Text(typed.isEmpty ? '?' : typed, style: ts(size, color: boxColor)),
+          child: Text(typed.isEmpty ? '?' : typed,
+              textScaler: TextScaler.noScaling, style: ts(size, color: boxColor, height: 1.0).copyWith(leadingDistribution: TextLeadingDistribution.even)),
         );
+    Text txt(String v, TextStyle st) => Text(v, textScaler: TextScaler.noScaling, style: st);
     final parts = <Widget>[
-      Text('${task.a}', style: style),
-      Text(' ${app.sign(task.op)} ', style: ts(size, color: signColor)),
-      task.missing ? box() : Text('${task.b}', style: style),
-      Text(' = ', style: style),
-      task.missing ? Text('${task.result}', style: style) : box(),
+      txt('${task.a}', style),
+      txt(' ${app.sign(task.op)} ', ts(size, color: signColor)),
+      task.missing ? box() : txt('${task.b}', style),
+      txt(' = ', style),
+      task.missing ? txt('${task.result}', style) : box(),
     ];
     return FittedBox(
       fit: BoxFit.scaleDown,

@@ -31,6 +31,14 @@ class TabuloApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(seedColor: C.orange, surface: C.cream),
           snackBarTheme: const SnackBarThemeData(backgroundColor: C.ink, behavior: SnackBarBehavior.floating),
         ),
+        // Large system font sizes would push digits out of the fixed answer boxes.
+        builder: (context, child) {
+          final mq = MediaQuery.of(context);
+          return MediaQuery(
+            data: mq.copyWith(textScaler: mq.textScaler.clamp(maxScaleFactor: 1.1)),
+            child: child ?? const SizedBox.shrink(),
+          );
+        },
         home: const RootGate(),
       ),
     );

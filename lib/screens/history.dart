@@ -90,8 +90,30 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ['div', app.sign(Op.div)],
       ['table', app.t('table_short')],
       ['column', app.t('column_short')],
-      ['quiz', 'Q'],
+      ['quiz', app.t('quiz')],
     ];
+    Widget chip(List<String> f) {
+      final on = _filter == f[0];
+      return GestureDetector(
+        onTap: () => setState(() => _filter = f[0]),
+        child: Container(
+          height: 44,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: on ? C.ink : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: on ? C.ink : C.line, width: 2),
+          ),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Text(f[1], style: ts(f[1].length > 2 ? 15 : 20, color: on ? Colors.white : C.ink)),
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       body: SafeArea(
@@ -108,31 +130,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
               stat(hours > 0 ? '$hours h $mins' : '$mins min', app.t('total_time')),
             ]),
             const SizedBox(height: 12),
-            SizedBox(
-              height: 42,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: filters.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 6),
-                itemBuilder: (_, i) {
-                  final f = filters[i];
-                  final on = _filter == f[0];
-                  return GestureDetector(
-                    onTap: () => setState(() => _filter = f[0]),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: on ? C.ink : Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: on ? C.ink : C.line, width: 2),
-                      ),
-                      child: Text(f[1], style: ts(16, color: on ? Colors.white : C.ink)),
-                    ),
-                  );
-                },
-              ),
-            ),
+            Gap(gap: 6, children: [for (final f in filters.take(5)) chip(f)]),
+            const SizedBox(height: 6),
+            Gap(gap: 6, children: [for (final f in filters.skip(5)) chip(f)]),
             const SizedBox(height: 12),
             Expanded(
               child: list.isEmpty

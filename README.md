@@ -18,3 +18,8 @@ Każde wgranie zmian do gałęzi `main` automatycznie buduje plik `tabulo-test.a
 - `lib/i18n.dart` – teksty (PL i EN pełne, DE/ES/FR/UK częściowo)
 - `lib/ui.dart` – kolory i wspólne elementy (przyciski, klawiatura)
 - `lib/screens/` – ekrany
+
+## Podpis wersji testowych
+
+`branding/test-signing/debug.keystore` to klucz tylko do wersji testowych: dzięki niemu każda nowa
+wersja instaluje się na poprzedniej. Wersja do Google Play będzie podpisana osobnym, prywatnym kluczem.

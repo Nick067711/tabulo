@@ -250,7 +250,7 @@ class AppState extends ChangeNotifier {
   bool onboarded = false;
   String lang = 'pl';
   String mulSign = '×';
-  String divSign = ':';
+  String divSign = '÷';
   List<Profile> profiles = [];
   String? activeId;
   List<ModuleConfig> modules = [
@@ -316,6 +316,7 @@ class AppState extends ChangeNotifier {
         'qc': quizCount,
         'qs': quizSince,
         'trial': trialStart,
+        'sv': 2,
         'paid': purchased,
         'sessions': sessions.map((s) => s.toJson()).toList(),
         'board': board.map((e) => e.toJson()).toList(),
@@ -330,6 +331,7 @@ class AppState extends ChangeNotifier {
     lang = langs.contains(j['lang']) ? '${j['lang']}' : 'en';
     mulSign = '${j['mul'] ?? '×'}';
     divSign = '${j['div'] ?? ':'}';
+    if (j['sv'] != 2) applyDefaultSigns(); // older test builds used other defaults
     profiles = list('profiles').map(Profile.fromJson).toList();
     activeId = j['active'] as String?;
     final mods = list('modules').map(ModuleConfig.fromJson).toList();
@@ -365,22 +367,10 @@ class AppState extends ChangeNotifier {
 
   // ---------- language and signs ----------
 
+  /// Standard signs for everyone; they can be changed in Settings.
   void applyDefaultSigns() {
-    switch (lang) {
-      case 'pl':
-      case 'de':
-      case 'uk':
-        mulSign = '•';
-        divSign = ':';
-        break;
-      case 'en':
-        mulSign = '×';
-        divSign = '÷';
-        break;
-      default:
-        mulSign = '×';
-        divSign = ':';
-    }
+    mulSign = '×';
+    divSign = '÷';
   }
 
   void setLang(String l, {bool withSigns = false}) {

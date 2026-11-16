@@ -371,7 +371,9 @@ class _TableScreenState extends State<TableScreen> {
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: C.orange, width: 3),
                   ),
-                  child: Text(_val.isEmpty ? '?' : _val, style: ts(30, color: C.orange)),
+                  child: Text(_val.isEmpty ? '?' : _val,
+                      textScaler: TextScaler.noScaling,
+                      style: ts(30, color: C.orange, height: 1.0).copyWith(leadingDistribution: TextLeadingDistribution.even)),
                 ),
               ])
             : Text(app.t('table_pick'), style: ts(17, color: C.inkSoft, weight: FontWeight.w800)),

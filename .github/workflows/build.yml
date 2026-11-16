@@ -36,6 +36,12 @@ jobs:
           done
           sed -i 's/android:label="tabulo"/android:label="Tabulo"/' android/app/src/main/AndroidManifest.xml
 
+      - name: Use the fixed test signing key
+        run: |
+          # The same key in every build lets a new test version install over the previous one.
+          mkdir -p ~/.android
+          cp branding/test-signing/debug.keystore ~/.android/debug.keystore
+
       - name: Get packages
         run: flutter pub get
 
