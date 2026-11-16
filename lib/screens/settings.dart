@@ -4,6 +4,7 @@ import '../state.dart';
 import '../ui.dart';
 import 'leaderboard.dart';
 import 'onboarding.dart';
+import 'quiz.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -113,7 +114,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Pick(
             label: s,
             on: app.mulSign == s,
-            height: 78,
+            height: 88,
             onTap: () => app.setMulSign(s),
             child: _signChild(s, '7 $s 8', app.mulSign == s),
           ),
@@ -127,7 +128,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             on: app.divSign == s,
             color: C.purple,
             dark: C.purpleD,
-            height: 78,
+            height: 88,
             onTap: () => app.setDivSign(s),
             child: _signChild(s, '56 $s 8', app.divSign == s),
           ),
@@ -138,7 +139,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           OpBadge(op: Op.mul, size: 54),
           const SizedBox(width: 8),
           OpBadge(op: Op.div, size: 54),
-          const SizedBox(width: 14),
+          const SizedBox(width: 26),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               FittedBox(child: Text('7 ${app.mulSign} 8 = 56', style: ts(22))),
@@ -169,7 +170,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _signChild(String s, String example, bool on) => Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Text(s, style: ts(34, color: on ? Colors.white : C.ink, height: 1.1)),
+        Text(s, style: ts(34, color: on ? Colors.white : C.ink, height: 1.0)),
+        const SizedBox(height: 8),
         Text(example, style: ts(13, color: on ? Colors.white70 : C.inkSoft, weight: FontWeight.w800)),
       ]);
 
@@ -343,16 +345,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // ---------------- Quiz ----------------
 
   Widget _quiz(AppState app) {
-    final m = app.sign(Op.mul);
-    final d = app.sign(Op.div);
-    Widget rule(String a, String b) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 5),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(a, style: ts(15)),
-            const SizedBox(width: 10),
-            Expanded(child: Text(b, style: ts(15, color: C.inkSoft, weight: FontWeight.w800), textAlign: TextAlign.right)),
-          ]),
-        );
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       SectionLabel(app.t('quiz_count')),
       Gap(gap: 8, children: [
@@ -383,10 +375,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(width: 6),
             Text(app.t('fixed_rules'), style: ts(13, color: C.inkSoft)),
           ]),
-          const SizedBox(height: 6),
-          rule('${app.sign(Op.add)} ${app.sign(Op.sub)}', app.t('rule_as')),
-          rule('$m $d', app.t('rule_md').replaceAll('{m}', m).replaceAll('{d}', d)),
-          rule(app.t('ranking'), app.t('winner_rule')),
+          const SizedBox(height: 12),
+          const QuizGroupRule(group: 0),
+          const SizedBox(height: 14),
+          const QuizGroupRule(group: 1),
+          const SizedBox(height: 16),
+          const QuizRanking(),
         ]),
       ),
       const SizedBox(height: 12),

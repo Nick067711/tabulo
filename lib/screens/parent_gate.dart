@@ -87,7 +87,7 @@ class _ParentGateState extends State<ParentGate> {
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: _wrong ? const Color(0xFFFF8A8A) : C.yellow, width: 3),
                 ),
-                child: Text(_val.isEmpty ? '_ _ _' : _val, style: ts(38, color: Colors.white)),
+                child: Text(_val.isEmpty ? '_ _ _' : _val, textScaler: TextScaler.noScaling, style: tsBox(38, color: Colors.white)),
               ),
               const SizedBox(height: 8),
               SizedBox(

@@ -168,8 +168,9 @@ class _ColumnScreenState extends State<ColumnScreen> {
       desc: widget.tasks != null
           ? app.t('retry_desc')
           : '${_op == Op.add ? app.opName(Op.add) : app.opName(Op.sub)} · ${app.t('digits_n').replaceAll('{n}', '$_digits')}',
+      stars: starsFor(_good, _tasks.length),
     );
-    app.addSession(s, stars: _good * 2);
+    app.addSession(s);
     Navigator.of(context).pushReplacement(MaterialPageRoute(
       builder: (_) => SummaryScreen(
         session: s,

@@ -75,6 +75,7 @@ class Session {
   final List<Mistake> mistakes;
   final String desc;
   final bool choice;
+  final int stars;
   Session({
     required this.id,
     required this.profileId,
@@ -86,6 +87,7 @@ class Session {
     required this.mistakes,
     this.desc = '',
     this.choice = false,
+    this.stars = 0,
   });
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -98,6 +100,7 @@ class Session {
         'x': mistakes.map((m) => m.toJson()).toList(),
         'desc': desc,
         'ch': choice,
+        'st': stars,
       };
   static Session fromJson(Map<String, dynamic> j) => Session(
         id: '${j['id']}',
@@ -112,7 +115,17 @@ class Session {
             .toList(),
         desc: '${j['desc'] ?? ''}',
         choice: j['ch'] == true,
+        stars: _int(j['st']),
       );
+}
+
+/// Stars for a finished exercise: 3 for at least 90% correct, 2 for 70%, otherwise 1.
+int starsFor(int correct, int total) {
+  if (total <= 0) return 1;
+  final pct = correct * 100 / total;
+  if (pct >= 90) return 3;
+  if (pct >= 70) return 2;
+  return 1;
 }
 
 class LbEntry {
@@ -518,12 +531,12 @@ class AppState extends ChangeNotifier {
 
   List<Session> sessionsOf(String profileId) => sessions.where((s) => s.profileId == profileId).toList();
 
-  void addSession(Session s, {int stars = 0}) {
+  void addSession(Session s) {
     sessions.insert(0, s);
     if (sessions.length > maxSessions) sessions.removeRange(maxSessions, sessions.length);
-    if (stars > 0) {
+    if (s.stars > 0) {
       for (final p in profiles) {
-        if (p.id == s.profileId) p.stars += stars;
+        if (p.id == s.profileId) p.stars += s.stars;
       }
     }
     _changed();

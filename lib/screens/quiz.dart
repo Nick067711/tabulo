@@ -28,6 +28,7 @@ class _QuizScreenState extends State<QuizScreen> {
   final List<Timer> _timers = [];
   Timer? _tick;
   QuizOutcome? _outcome;
+  int _earned = 0;
   int _total = 100;
 
   @override
@@ -125,10 +126,11 @@ class _QuizScreenState extends State<QuizScreen> {
         correct: _good,
         mistakes: List.of(_mistakes),
         desc: '$_total ${app.t('tasks_word')}',
+        stars: starsFor(_good, _total) + (outcome.isRecord ? 3 : 0),
       ),
-      stars: _good ~/ 2,
     );
     setState(() {
+      _earned = starsFor(_good, _total) + (outcome.isRecord ? 3 : 0);
       _outcome = outcome;
       _phase = 'done';
       _flash = null;
@@ -233,33 +235,30 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   Widget _intro(AppState app) {
-    Widget row(String a, String b, {Color c = Colors.white}) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 5),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(a, style: ts(15, color: C.soft2, weight: FontWeight.w800)),
-            const SizedBox(width: 10),
-            Expanded(child: Text(b, style: ts(15, color: c, weight: FontWeight.w800), textAlign: TextAlign.right)),
-          ]),
-        );
-    final m = app.sign(Op.mul);
-    final d = app.sign(Op.div);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Text(app.t('pick_group'), style: ts(18, color: Colors.white)),
       const SizedBox(height: 10),
       Gap(gap: 12, children: [_groupCard(app, 0), _groupCard(app, 1)]),
       const SizedBox(height: 14),
-      Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: C.navy2, borderRadius: BorderRadius.circular(20)),
-        child: Column(children: [
-          row(app.t('task_count'), '${app.quizCount}'),
-          row(app.t('operations'), _group == 0
-              ? app.t('rule_as')
-              : app.t('rule_md').replaceAll('{m}', m).replaceAll('{d}', d)),
-          row(app.t('winner'), app.t('winner_rule')),
-        ]),
+      Expanded(
+        child: SingleChildScrollView(
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: C.navy2, borderRadius: BorderRadius.circular(20)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(child: Text(app.t('task_count'), style: ts(15, color: C.soft2, weight: FontWeight.w800))),
+                Text('${app.quizCount}', style: ts(18, color: Colors.white)),
+              ]),
+              const SizedBox(height: 14),
+              QuizGroupRule(group: _group, dark: true),
+              const SizedBox(height: 14),
+              const QuizRanking(dark: true),
+            ]),
+          ),
+        ),
       ),
-      const Spacer(),
+      const SizedBox(height: 14),
       Chunky(
         height: 76,
         color: C.yellow,
@@ -388,7 +387,12 @@ class _QuizScreenState extends State<QuizScreen> {
         tile(const Color(0xFF7A2230), Icons.close_rounded, '$_bad', app.t('wrong_pl')),
       ]),
       const SizedBox(height: 10),
-      Text('${app.t('time')}: ${fmtMs(_endAt - _startAt)}', style: ts(16, color: C.soft2, weight: FontWeight.w800), textAlign: TextAlign.center),
+      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Text('${app.t('time')}: ${fmtMs(_endAt - _startAt)}', style: ts(16, color: C.soft2, weight: FontWeight.w800)),
+        const SizedBox(width: 14),
+        const Icon(Icons.star_rounded, color: C.yellow, size: 20),
+        Text(' +$_earned', style: ts(16, color: C.yellow)),
+      ]),
       const SizedBox(height: 14),
       Container(
         padding: const EdgeInsets.all(18),
@@ -430,6 +434,96 @@ class _QuizScreenState extends State<QuizScreen> {
           child: Text(app.t('again'), style: ts(18, color: Colors.white)),
         ),
       ]),
+    ]);
+  }
+}
+
+
+/// Small coloured operation blocks, as on the menu tiles.
+class OpMini extends StatelessWidget {
+  final Op op;
+  final double size;
+  const OpMini({super.key, required this.op, this.size = 34});
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: C.op(op),
+        borderRadius: BorderRadius.circular(size * 0.3),
+        boxShadow: [BoxShadow(color: C.opD(op), offset: const Offset(0, 3))],
+      ),
+      child: Text(app.sign(op),
+          textScaler: TextScaler.noScaling,
+          style: ts(size * 0.62, color: Colors.white, height: 1.0).copyWith(leadingDistribution: TextLeadingDistribution.even)),
+    );
+  }
+}
+
+/// Fixed rules of one quiz group: coloured blocks + two lines of text.
+class QuizGroupRule extends StatelessWidget {
+  final int group;
+  final bool dark;
+  const QuizGroupRule({super.key, required this.group, this.dark = false});
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final a = group == 0 ? Op.add : Op.mul;
+    final b = group == 0 ? Op.sub : Op.div;
+    final line1 = group == 0 ? app.t('rule_as1') : app.t('rule_md1');
+    final line2 = (group == 0 ? app.t('rule_as2') : app.t('rule_md2'))
+        .replaceAll('{m}', app.sign(Op.mul))
+        .replaceAll('{d}', app.sign(Op.div));
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      OpMini(op: a),
+      const SizedBox(width: 6),
+      OpMini(op: b),
+      const SizedBox(width: 14),
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(line1, style: ts(15, color: dark ? Colors.white : C.ink, height: 1.3)),
+          const SizedBox(height: 2),
+          Text(line2, style: ts(14, color: dark ? C.soft2 : C.inkSoft, weight: FontWeight.w700, height: 1.3)),
+        ]),
+      ),
+    ]);
+  }
+}
+
+/// How the quiz result is ranked, in plain words.
+class QuizRanking extends StatelessWidget {
+  final bool dark;
+  const QuizRanking({super.key, this.dark = false});
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final main = dark ? Colors.white : C.ink;
+    final soft = dark ? C.soft2 : C.inkSoft;
+    Widget point(String n, String text) => Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              width: 22,
+              height: 22,
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(color: C.yellow, shape: BoxShape.circle),
+              child: Text(n, style: ts(13, height: 1.0)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Text(text, style: ts(14, color: soft, weight: FontWeight.w700, height: 1.35))),
+          ]),
+        );
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        const Icon(Icons.emoji_events_rounded, color: C.yellow, size: 20),
+        const SizedBox(width: 8),
+        Text(app.t('ranking_title'), style: ts(15, color: main)),
+      ]),
+      point('1', app.t('ranking_1')),
+      point('2', app.t('ranking_2')),
     ]);
   }
 }

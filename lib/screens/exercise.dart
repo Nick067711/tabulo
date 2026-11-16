@@ -240,8 +240,9 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
       mistakes: List.of(_mistakes),
       desc: desc,
       choice: widget.choice,
+      stars: starsFor(_good, _tasks.length),
     );
-    app.addSession(s, stars: _good);
+    app.addSession(s);
     Navigator.of(context).pushReplacement(MaterialPageRoute(
       builder: (_) => SummaryScreen(
         session: s,
@@ -376,7 +377,7 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
         _picked = v;
         _answer('$v');
       },
-      child: FittedBox(fit: BoxFit.scaleDown, child: Text('$v', style: ts(46, color: fg))),
+      child: FittedBox(fit: BoxFit.scaleDown, child: Text('$v', textScaler: TextScaler.noScaling, style: tsBox(46, color: fg))),
     );
   }
 }
@@ -390,8 +391,7 @@ class SummaryScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final s = session;
-    final pct = s.total == 0 ? 0 : s.correct * 100 ~/ s.total;
-    final stars = pct >= 90 ? 3 : (pct >= 70 ? 2 : 1);
+    final stars = starsFor(s.correct, s.total);
     final title = stars == 3 ? app.t('great') : (stars == 2 ? app.t('good_job') : app.t('keep_going'));
     Widget stat(String big, String small, Color c) => Expanded(
           child: Container(
@@ -427,7 +427,7 @@ class SummaryScreen extends StatelessWidget {
                 const SizedBox(width: 10),
                 stat(fmtMs(s.ms).split(',').first, app.t('time'), C.ink),
                 const SizedBox(width: 10),
-                stat('+${s.correct}', app.t('stars'), const Color(0xFFB07800)),
+                stat('+${s.stars}', app.t('stars'), const Color(0xFFB07800)),
               ]),
               const SizedBox(height: 16),
               if (s.mistakes.isNotEmpty)

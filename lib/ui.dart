@@ -62,6 +62,10 @@ class AppScope extends InheritedNotifier<AppState> {
 TextStyle ts(double size, {Color color = C.ink, FontWeight weight = FontWeight.w900, double? height}) =>
     TextStyle(fontSize: size, color: color, fontWeight: weight, height: height);
 
+/// Text style for digits inside fixed-size boxes: the glyphs sit in the vertical middle.
+TextStyle tsBox(double size, {Color color = C.ink}) =>
+    ts(size, color: color, height: 1.0).copyWith(leadingDistribution: TextLeadingDistribution.even);
+
 /// A "toy block" button with a solid shadow underneath that sinks when pressed.
 class Chunky extends StatefulWidget {
   final Widget child;
@@ -386,7 +390,7 @@ class Keypad extends StatelessWidget {
       color: bg,
       shadow: dark ? C.navyD : C.line,
       border: dark ? null : C.line,
-      child: Text(label, style: ts(keyHeight * 0.5, color: dark ? Colors.white : C.ink)),
+      child: Text(label, textScaler: TextScaler.noScaling, style: tsBox(keyHeight * 0.5, color: dark ? Colors.white : C.ink)),
     );
   }
 
@@ -412,7 +416,7 @@ class Keypad extends StatelessWidget {
       radius: 20,
       color: on ? C.green : (dark ? const Color(0xFF2C5E46) : const Color(0xFFA9D8BC)),
       shadow: on ? C.greenD : (dark ? const Color(0xFF1C3F2E) : const Color(0xFF8CC3A3)),
-      child: Text(okLabel, style: ts(keyHeight * 0.4, color: on ? Colors.white : Colors.white70)),
+      child: Text(okLabel, textScaler: TextScaler.noScaling, style: tsBox(keyHeight * 0.4, color: on ? Colors.white : Colors.white70)),
     );
   }
 

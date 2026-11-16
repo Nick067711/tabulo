@@ -18,8 +18,14 @@ Future<void> openSettings(BuildContext context) async {
   Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
 }
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  bool _starsInfo = false;
 
   void _go(BuildContext context, Widget screen, {bool needsFull = true}) {
     final app = AppScope.read(context);
@@ -28,6 +34,48 @@ class HomeScreen extends StatelessWidget {
       return;
     }
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+  }
+
+  Widget _starsCard(AppState app) {
+    Widget row(int n, String text) => Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Row(children: [
+            SizedBox(
+              width: 66,
+              child: n > 0
+                  ? Row(children: [for (var i = 0; i < n; i++) const Icon(Icons.star_rounded, color: Color(0xFFE8A400), size: 21)])
+                  : Text('+3', style: ts(17, color: const Color(0xFFB07800))),
+            ),
+            Expanded(child: Text(text, style: ts(14, weight: FontWeight.w800, height: 1.3))),
+          ]),
+        );
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF7DD),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: C.yellow, width: 2),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(child: Text(app.t('stars_title'), style: ts(17))),
+            IconButton(
+              icon: const Icon(Icons.close_rounded, color: C.ink),
+              tooltip: app.t('close'),
+              onPressed: () => setState(() => _starsInfo = false),
+            ),
+          ]),
+          Text(app.t('stars_intro'), style: ts(14, color: C.inkSoft, weight: FontWeight.w700, height: 1.35)),
+          row(3, app.t('stars_3')),
+          row(2, app.t('stars_2')),
+          row(1, app.t('stars_1')),
+          row(0, app.t('stars_record')),
+        ]),
+      ),
+    );
   }
 
   @override
@@ -63,65 +111,84 @@ class HomeScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // ---- header ----
-              Row(children: [
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Avatar(p: me, size: 52),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: PopupMenuButton<String>(
-                    offset: const Offset(0, 62),
-                    color: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                    tooltip: app.t('switch_user'),
-                    onSelected: (id) {
-                      if (id == '_manage') {
-                        openSettings(context);
-                      } else {
-                        app.setActive(id);
-                      }
-                    },
-                    itemBuilder: (_) => [
-                      for (final p in app.profiles)
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    PopupMenuButton<String>(
+                      offset: const Offset(0, 40),
+                      color: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      tooltip: app.t('switch_user'),
+                      onSelected: (id) {
+                        if (id == '_manage') {
+                          openSettings(context);
+                        } else {
+                          app.setActive(id);
+                        }
+                      },
+                      itemBuilder: (_) => [
+                        for (final p in app.profiles)
+                          PopupMenuItem<String>(
+                            value: p.id,
+                            child: Row(children: [
+                              Avatar(p: p, size: 36),
+                              const SizedBox(width: 12),
+                              Expanded(child: Text(p.name, style: ts(17))),
+                              if (p.id == me.id) const Icon(Icons.check_rounded, color: C.green),
+                            ]),
+                          ),
+                        const PopupMenuDivider(),
                         PopupMenuItem<String>(
-                          value: p.id,
+                          value: '_manage',
                           child: Row(children: [
-                            Avatar(p: p, size: 36),
-                            const SizedBox(width: 12),
-                            Expanded(child: Text(p.name, style: ts(17))),
-                            if (p.id == me.id) const Icon(Icons.check_rounded, color: C.green),
+                            const Icon(Icons.add_rounded, color: C.blue),
+                            const SizedBox(width: 10),
+                            Expanded(child: Text(app.t('manage_users'), style: ts(15, color: C.blue, weight: FontWeight.w800))),
                           ]),
                         ),
-                      const PopupMenuDivider(),
-                      PopupMenuItem<String>(
-                        value: '_manage',
+                      ],
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
                         child: Row(children: [
-                          const Icon(Icons.add_rounded, color: C.blue),
-                          const SizedBox(width: 10),
-                          Expanded(child: Text(app.t('manage_users'), style: ts(15, color: C.blue, weight: FontWeight.w800))),
+                          Flexible(
+                            child: Text(app.t('hi').replaceAll('{name}', me.name),
+                                style: ts(21), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ),
+                          const Icon(Icons.expand_more_rounded, color: C.ink),
                         ]),
                       ),
-                    ],
-                    child: Row(children: [
-                      Avatar(p: me, size: 48),
-                      const SizedBox(width: 12),
-                      Flexible(
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Row(children: [
-                            Flexible(
-                              child: Text(app.t('hi').replaceAll('{name}', me.name),
-                                  style: ts(20), maxLines: 1, overflow: TextOverflow.ellipsis),
-                            ),
-                            const Icon(Icons.expand_more_rounded, color: C.ink),
-                          ]),
-                          Row(children: [
-                            const Icon(Icons.star_rounded, color: Color(0xFFE8A400), size: 18),
-                            const SizedBox(width: 3),
-                            Text('${me.stars} ${app.t('stars')}', style: ts(14, color: C.inkSoft, weight: FontWeight.w700)),
-                          ]),
+                    ),
+                    const SizedBox(height: 2),
+                    GestureDetector(
+                      onTap: () => setState(() => _starsInfo = !_starsInfo),
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(6, 3, 8, 3),
+                        decoration: BoxDecoration(
+                          color: _starsInfo ? const Color(0xFFFFF0C2) : Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _starsInfo ? C.yellow : C.line, width: 2),
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.star_rounded, color: Color(0xFFE8A400), size: 18),
+                          const SizedBox(width: 3),
+                          Text('${me.stars} ${app.t('stars')}', style: ts(14, color: C.inkSoft, weight: FontWeight.w800)),
+                          const SizedBox(width: 6),
+                          Icon(_starsInfo ? Icons.expand_less_rounded : Icons.info_outline_rounded, color: C.inkSoft, size: 17),
                         ]),
                       ),
-                    ]),
-                  ),
+                    ),
+                  ]),
                 ),
                 IconBox(icon: Icons.settings_rounded, tooltip: app.t('settings'), onTap: () => openSettings(context)),
               ]),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOut,
+                alignment: Alignment.topCenter,
+                child: _starsInfo ? _starsCard(app) : const SizedBox(width: double.infinity),
+              ),
               const SizedBox(height: 14),
 
               // ---- trial / buy banner ----

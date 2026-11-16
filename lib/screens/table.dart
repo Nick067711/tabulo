@@ -100,8 +100,9 @@ class _TableScreenState extends State<TableScreen> {
       correct: total - g.firstBad.length,
       mistakes: mistakes,
       desc: total == 100 ? app.t('table_whole') : app.t('table_random'),
+      stars: starsFor(total - g.firstBad.length, total),
     );
-    app.addSession(s, stars: s.correct ~/ 2);
+    app.addSession(s);
     app.saveTableGame(app.me.id, null);
     Navigator.of(context).pushReplacement(MaterialPageRoute(
       builder: (_) => SummaryScreen(
@@ -335,7 +336,7 @@ class _TableScreenState extends State<TableScreen> {
           fit: BoxFit.scaleDown,
           child: Padding(
             padding: const EdgeInsets.all(2),
-            child: Text(label, style: ts(size * 0.42, color: fg)),
+            child: Text(label, textScaler: TextScaler.noScaling, style: tsBox(size * 0.42, color: fg)),
           ),
         ),
       ),
