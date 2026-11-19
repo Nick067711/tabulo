@@ -123,7 +123,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             TopBar(title: app.t('my_progress'), subtitle: app.me.name),
             const SizedBox(height: 12),
             Row(children: [
-              stat('${mine.length}', app.t('sessions_word')),
+              stat('${mine.length}', app.plural(mine.length, 'sessions')),
               const SizedBox(width: 8),
               stat('$pct%', app.t('correct_word'), c: C.greenD),
               const SizedBox(width: 8),

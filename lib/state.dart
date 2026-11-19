@@ -457,6 +457,21 @@ class AppState extends ChangeNotifier {
 
   String opName(Op op) => t('op_${op.name}');
 
+  /// Word that goes with a number: keys base_1, base_few, base_many.
+  /// Polish and Ukrainian have three forms (1 gwiazdka, 2 gwiazdki, 5 gwiazdek).
+  String plural(int n, String base) {
+    final a = n.abs();
+    final form = switch (lang) {
+      'pl' => a == 1 ? '1' : (a % 10 >= 2 && a % 10 <= 4 && (a % 100 < 12 || a % 100 > 14) ? 'few' : 'many'),
+      'uk' => a % 10 == 1 && a % 100 != 11
+          ? '1'
+          : (a % 10 >= 2 && a % 10 <= 4 && (a % 100 < 12 || a % 100 > 14) ? 'few' : 'many'),
+      'fr' => a <= 1 ? '1' : 'many',
+      _ => a == 1 ? '1' : 'many',
+    };
+    return t('${base}_$form');
+  }
+
   String fullText(Task task) {
     final base = '${task.a} ${sign(task.op)} ${task.b} = ${task.result}';
     // Long division with a remainder: "470 : 3 = 156 r. 2".

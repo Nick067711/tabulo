@@ -62,12 +62,12 @@ Future<AppState> _state(String lang) async {
   await app.load();
   app.setLang(lang, withSigns: true);
   const people = [
-    ('John', 142, 98, 251000, 96, 228000),
-    ('Emma', 127, 97, 263000, 98, 214000),
-    ('Mark', 96, 95, 242000, 93, 236000),
-    ('Nick', 88, 93, 288000, 91, 247000),
-    ('Lucy', 64, 90, 301000, 88, 262000),
-    ('Adam', 41, 86, 318000, 84, 279000),
+    ('John', 145, 98, 251000, 96, 228000, 48),
+    ('Emma', 127, 97, 263000, 98, 214000, 41),
+    ('Mark', 96, 95, 242000, 93, 236000, 35),
+    ('Nick', 88, 93, 288000, 91, 247000, 27),
+    ('Lucy', 66, 90, 301000, 88, 262000, 19),
+    ('Adam', 41, 86, 318000, 84, 279000, 15),
   ];
   for (final p in people) {
     final prof = app.addProfile(p.$1);
@@ -83,6 +83,18 @@ Future<AppState> _state(String lang) async {
       mistakes: const [],
       stars: p.$2,
     ));
+    for (var i = 1; i < p.$7; i++) {
+      app.addSession(Session(
+        id: app.newId(),
+        profileId: prof.id,
+        kind: 'add',
+        date: app.now,
+        ms: 80000,
+        total: 20,
+        correct: 18,
+        mistakes: const [],
+      ));
+    }
     app.addQuizResult(0, p.$3, p.$4);
     app.addQuizResult(1, p.$5, p.$6);
   }

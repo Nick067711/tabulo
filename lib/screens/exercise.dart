@@ -454,7 +454,7 @@ class SummaryScreen extends StatelessWidget {
                 const SizedBox(width: 10),
                 stat(fmtMs(s.ms).split(',').first, app.t('time'), C.ink),
                 const SizedBox(width: 10),
-                stat('+${s.stars}', app.t('stars'), const Color(0xFFB07800)),
+                stat('+${s.stars}', app.plural(s.stars, 'stars'), const Color(0xFFB07800)),
               ]),
               const SizedBox(height: 16),
               if (s.mistakes.isNotEmpty)

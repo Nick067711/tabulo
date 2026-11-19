@@ -287,7 +287,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Expanded(
                 child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(p.name, style: ts(18)),
-                  Text('${app.sessionsOf(p.id).length} ${app.t('sessions_word')} · ${p.stars} ${app.t('stars')}',
+                  Text('${app.sessionsOf(p.id).length} ${app.plural(app.sessionsOf(p.id).length, 'sessions')} · ${p.stars} ${app.plural(p.stars, 'stars')}',
                       style: ts(13, color: C.inkSoft, weight: FontWeight.w700)),
                 ]),
               ),

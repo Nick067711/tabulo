@@ -136,7 +136,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Row(mainAxisSize: MainAxisSize.min, children: [
                           const Icon(Icons.star_rounded, color: Color(0xFFE8A400), size: 18),
                           const SizedBox(width: 3),
-                          Text('${me.stars} ${app.t('stars')}', style: ts(14, color: C.inkSoft, weight: FontWeight.w800)),
+                          Text('${me.stars} ${app.plural(me.stars, 'stars')}', style: ts(14, color: C.inkSoft, weight: FontWeight.w800)),
                           const SizedBox(width: 6),
                           Icon(_starsInfo ? Icons.expand_less_rounded : Icons.info_outline_rounded, color: C.inkSoft, size: 17),
                         ]),
