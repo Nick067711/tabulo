@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../logic.dart';
 import '../state.dart';
@@ -79,7 +80,9 @@ class ColumnPlan {
 }
 
 /// Multiplication by a two-digit number: two partial products, then their sum.
-/// Cells: m0_{i}, m1_{i} (rows of partial products, i = column from the right), s_{i} the sum.
+/// Cells: m0_{i}, m1_{i} (rows of partial products, i = column from the right), s_{i} the sum,
+/// k{r}_{j} small boxes for the carries of row r, above digit j of the top number. The boxes
+/// show the carries of the row being worked on, so they are empty again for the second row.
 class LongMulPlan {
   final Task task;
   final int width;
@@ -92,6 +95,7 @@ class LongMulPlan {
     final bd = [t.b % 10, t.b ~/ 10];
     final prods = [t.a * bd[0], t.a * bd[1]];
     final sum = t.a * t.b;
+    final aLen = _len(t.a);
     final w = math.max(_len(sum), math.max(_len(prods[0]), _len(prods[1]) + 1));
     final exp = <String, String>{};
     final cin = <String, int>{};
@@ -99,6 +103,11 @@ class LongMulPlan {
     for (var r = 0; r < 2; r++) {
       var carry = 0;
       for (var j = 0; j < _len(prods[r]); j++) {
+        if (j > 0 && j < aLen && bd[r] > 0) {
+          final k = 'k${r}_$j';
+          exp[k] = carry == 0 ? '' : '$carry';
+          order.add(k);
+        }
         final id = 'm${r}_${j + r}';
         exp[id] = '${_dig(prods[r], j)}';
         cin[id] = carry;
@@ -119,7 +128,15 @@ class LongMulPlan {
   }
 
   int prod(int r) => task.a * (r == 0 ? task.b % 10 : task.b ~/ 10);
-  bool isRight(String id, String v) => v == (expected[id] ?? '');
+
+  /// Carry boxes are a help for the child and are not marked as mistakes.
+  bool isRight(String id, String v) => id.startsWith('k') || v == (expected[id] ?? '');
+
+  /// Row (0 or 1) whose carries are shown above the top number, or null while adding.
+  static int? rowOf(String? id) {
+    if (id == null || id.startsWith('s')) return null;
+    return id[1] == '0' ? 0 : 1;
+  }
 }
 
 /// One step of long division: how many times the divisor fits into [cur].
@@ -129,16 +146,20 @@ class DivStep {
   const DivStep(this.pos, this.cur, this.q, this.prod, this.rem);
 }
 
+// When the next number would be smaller than the divisor, the 0 of the result is written in
+// the same step: 612 : 3 → 61 : 3 = 20, 61 − 60 = 1, bring down 2 → 12 : 3 = 4.
+
 /// Long division. Fields q{k} (quotient digit), p{k} (product), r{k} (difference) of step k;
 /// each field has one box per digit: "p0.0", "p0.1"…, filled from the left.
 class DivPlan {
   final Task task;
   final List<int> digits;
   final List<DivStep> steps;
+  final int firstPos; // dividend digit above which the first digit of the result stands
   final Map<String, int> fieldLen;
   final Map<String, String> expected; // per box
   final List<String> order;
-  DivPlan._(this.task, this.digits, this.steps, this.fieldLen, this.expected, this.order);
+  DivPlan._(this.task, this.digits, this.steps, this.firstPos, this.fieldLen, this.expected, this.order);
 
   factory DivPlan(Task t) {
     final ds = '${t.a}'.split('').map(int.parse).toList();
@@ -149,9 +170,15 @@ class DivPlan {
       pos++;
       cur = cur * 10 + ds[pos];
     }
+    final firstPos = pos;
     final steps = <DivStep>[];
     while (true) {
-      final q = cur ~/ d;
+      var q = cur ~/ d;
+      while (pos + 1 < ds.length && (cur - q * d) * 10 + ds[pos + 1] < d) {
+        pos++;
+        cur = cur * 10 + ds[pos];
+        q = cur ~/ d;
+      }
       final p = q * d;
       final r = cur - p;
       steps.add(DivStep(pos, cur, q, p, r));
@@ -174,12 +201,12 @@ class DivPlan {
     for (var k = 0; k < steps.length; k++) {
       final s = steps[k];
       final last = k == steps.length - 1;
-      add('q$k', '${s.q}', 1);
+      add('q$k', '${s.q}', _len(s.q));
       add('p$k', '${s.prod}', _len(s.prod));
       // An intermediate difference of 0 may be left empty.
       add('r$k', !last && s.rem == 0 ? '' : '${s.rem}', _len(s.rem));
     }
-    return DivPlan._(t, ds, steps, flen, exp, order);
+    return DivPlan._(t, ds, steps, firstPos, flen, exp, order);
   }
 
   bool isRight(String id, String value) {
@@ -201,6 +228,7 @@ class _ColumnScreenState extends State<ColumnScreen> {
   int _digits = 3;
   bool _two = false; // × / ÷ by a two-digit number
   bool _rem = false; // ÷ with a remainder
+  bool _custom = false; // a task typed in by the child (e.g. copied from a notebook)
   bool _started = false;
   List<Task> _tasks = [];
   int _idx = 0;
@@ -286,6 +314,26 @@ class _ColumnScreenState extends State<ColumnScreen> {
   void _type(String d) {
     final s = _sel;
     if (s == null || _solved) return;
+    final lm = _lm;
+    if (lm != null) {
+      setState(() {
+        _vals[s] = d;
+        _checked = false;
+        if (s.startsWith('m')) {
+          final r = s[1] == '0' ? 0 : 1;
+          final j = int.parse(s.split('_')[1]) - r;
+          final k = 'k${r}_${j + 1}';
+          if (lm.expected.containsKey(k)) {
+            // Nothing to carry and the digit is right: skip the small box.
+            final empty = (lm.expected[k] ?? '').isEmpty;
+            _sel = empty && lm.isRight(s, d) ? 'm${r}_${j + 1 + r}' : k;
+            return;
+          }
+        }
+        _advance(s);
+      });
+      return;
+    }
     final plan = _plan;
     if (plan == null) {
       setState(() {
@@ -356,6 +404,10 @@ class _ColumnScreenState extends State<ColumnScreen> {
   void _next() {
     _timer?.cancel();
     if (!mounted) return;
+    if (_custom) {
+      _askCustom();
+      return;
+    }
     if (_idx + 1 >= _tasks.length) {
       _finish();
     } else {
@@ -387,9 +439,9 @@ class _ColumnScreenState extends State<ColumnScreen> {
         }
       }
     });
-    if (all) {
-      // Wait for "Next"; after 5 seconds the next task opens by itself.
-      _nextIn = 5;
+    // The solution stays on screen until "Next" is tapped, unless Settings say otherwise.
+    if (all && !_custom && AppScope.read(context).columnAuto) {
+      _nextIn = AppScope.read(context).columnDelayS;
       _timer?.cancel();
       _timer = Timer.periodic(const Duration(seconds: 1), (tm) {
         if (!mounted) {
@@ -404,6 +456,100 @@ class _ColumnScreenState extends State<ColumnScreen> {
         }
       });
     }
+  }
+
+  /// The child types in their own task, e.g. copied from a notebook. The operation is the one
+  /// chosen on the setup screen (or of the custom task being solved).
+  Future<void> _askCustom() async {
+    final app = AppScope.read(context);
+    final op = _custom && _started ? _task.op : _op;
+    final ca = TextEditingController();
+    final cb = TextEditingController();
+    String? err;
+    Widget numField(TextEditingController c, int maxLen) => SizedBox(
+          width: 104,
+          child: TextField(
+            controller: c,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            maxLength: maxLen,
+            textAlign: TextAlign.center,
+            style: ts(24),
+            decoration: InputDecoration(
+              counterText: '',
+              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: C.line, width: 2)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: C.op(op), width: 3)),
+            ),
+          ),
+        );
+    final task = await showDialog<Task>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) {
+          void submit() {
+            final a = int.tryParse(ca.text);
+            final b = int.tryParse(cb.text);
+            String? e;
+            if (a == null || b == null || a < 1 || b < 1) {
+              e = 'custom_err_empty';
+            } else if ((op == Op.mul || op == Op.div) && b > 99) {
+              e = 'custom_err_two';
+            } else if (op == Op.sub && a < b) {
+              e = 'custom_err_sub';
+            } else if (op == Op.div && a < b) {
+              e = 'custom_err_div';
+            }
+            if (e != null) {
+              setD(() => err = app.t(e!));
+              return;
+            }
+            Navigator.of(ctx).pop(Task(op, a!, b!));
+          }
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+            title: Text(app.t('custom_title'), style: ts(20)),
+            content: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text(app.t('custom_info'), style: ts(14, color: C.inkSoft, weight: FontWeight.w700, height: 1.35)),
+              const SizedBox(height: 16),
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                numField(ca, 5),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Text(app.sign(op), style: ts(30, color: C.op(op))),
+                ),
+                numField(cb, op == Op.mul || op == Op.div ? 2 : 5),
+              ]),
+              if (err != null) ...[
+                const SizedBox(height: 12),
+                Text(err!, style: ts(14, color: C.red, weight: FontWeight.w800)),
+              ],
+            ]),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(app.t('cancel'))),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: C.op(op)),
+                onPressed: submit,
+                child: Text(app.t('start')),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    ca.dispose();
+    cb.dispose();
+    if (!mounted) return;
+    if (task == null) {
+      // Cancelled while a custom task was open: back to the setup screen.
+      if (_custom && _started) _backToSetup();
+      return;
+    }
+    setState(() {
+      _custom = true;
+      _begin([task]);
+    });
   }
 
   String _setupDesc(AppState app) {
@@ -492,6 +638,7 @@ class _ColumnScreenState extends State<ColumnScreen> {
     final t = plan.task;
     final sel = _sel ?? plan.order.first;
     final cin = plan.carryIn[sel] ?? 0;
+    if (sel.startsWith('k')) return app.t('hint_mark_mul');
     if (sel.startsWith('m')) {
       final r = sel[1] == '0' ? 0 : 1;
       final col = int.parse(sel.split('_')[1]);
@@ -503,7 +650,8 @@ class _ColumnScreenState extends State<ColumnScreen> {
       final v = da * bd + cin;
       final e = _mulExpr(app, da, bd, cin);
       if (v >= 10) {
-        return pre + app.t('hint_lm_carry').replaceAll('{e}', e).replaceAll('{d}', '${v % 10}').replaceAll('{c}', '${v ~/ 10}');
+        final key = plan.expected.containsKey('k${r}_${j + 1}') ? 'hint_mul_carry' : 'hint_lm_carry';
+        return pre + app.t(key).replaceAll('{e}', e).replaceAll('{d}', '${v % 10}').replaceAll('{c}', '${v ~/ 10}');
       }
       return pre + app.t('hint_lm').replaceAll('{e}', e);
     }
@@ -529,7 +677,7 @@ class _ColumnScreenState extends State<ColumnScreen> {
     final s = plan.steps[k];
     final d = plan.task.b;
     if (f.startsWith('q')) {
-      return app.t('hint_div_q').replaceAll('{d}', '$d').replaceAll('{n}', '${s.cur}');
+      return app.t(_len(s.q) > 1 ? 'hint_div_q0' : 'hint_div_q').replaceAll('{d}', '$d').replaceAll('{n}', '${s.cur}');
     }
     if (f.startsWith('p')) {
       return app.t('hint_div_p').replaceAll('{e}', '${s.q} ${app.sign(Op.mul)} $d').replaceAll('{n}', '${s.cur}');
@@ -606,7 +754,11 @@ class _ColumnScreenState extends State<ColumnScreen> {
                       ? Column(mainAxisSize: MainAxisSize.min, children: [
                           Text('✓ ${app.t('bravo')} ${app.fullText(_task)}',
                               style: ts(16, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
-                          Text('${app.t('next')}  ›  ($_nextIn)', style: ts(20, color: Colors.white)),
+                          Text(
+                              _custom
+                                  ? '${app.t('new_custom')}  ›'
+                                  : (app.columnAuto ? '${app.t('next')}  ›  ($_nextIn)' : '${app.t('next')}  ›'),
+                              style: ts(20, color: Colors.white)),
                         ])
                       : Text(_checked ? '✗ ${app.t('fix_red')}' : 'OK', style: ts(20, color: Colors.white)),
                 ),
@@ -739,6 +891,19 @@ class _ColumnScreenState extends State<ColumnScreen> {
                       child: Text(info, style: ts(15, color: C.inkSoft, weight: FontWeight.w700, height: 1.4)),
                     ),
                     const SizedBox(height: 16),
+                    Chunky(
+                      height: 56,
+                      radius: 18,
+                      depth: 4,
+                      border: C.line,
+                      onTap: _askCustom,
+                      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        const Icon(Icons.edit_note_rounded, color: C.ink, size: 28),
+                        const SizedBox(width: 8),
+                        Flexible(child: Text('${app.t('custom_btn')}  ${app.sign(_op)}', style: ts(16))),
+                      ]),
+                    ),
+                    const SizedBox(height: 16),
                   ]),
                 ),
               ),
@@ -748,7 +913,10 @@ class _ColumnScreenState extends State<ColumnScreen> {
                 shadow: C.pinkD,
                 radius: 22,
                 depth: 7,
-                onTap: () => setState(() => _begin(Gen.column(_op, _digits, 5, two: mulDiv && _two, rem: _op == Op.div && _rem))),
+                onTap: () => setState(() {
+                  _custom = false;
+                  _begin(Gen.column(_op, _digits, 5, two: mulDiv && _two, rem: _op == Op.div && _rem));
+                }),
                 child: Text(app.t('start'), style: ts(24, color: Colors.white)),
               ),
             ],
@@ -894,8 +1062,9 @@ class _ColumnScreenState extends State<ColumnScreen> {
     final w = plan.width;
     const cw = 54.0;
     const rh = 58.0;
+    const kh = 44.0; // height of the row of carry boxes
     double x(int col) => (w - col) * cw; // column 0 is the rightmost; one free column on the left for the signs
-    double y(num row) => row * rh;
+    double y(num row) => kh + row * rh; // row 0 = top number
     final items = <Widget>[];
 
     Widget text(double left, num row, String s, {Color color = C.ink, double size = 38}) => Positioned(
@@ -913,6 +1082,14 @@ class _ColumnScreenState extends State<ColumnScreen> {
           child: Container(decoration: BoxDecoration(color: C.ink, borderRadius: BorderRadius.circular(2))),
         );
 
+    // Carry boxes of the row being worked on (empty again when the second row starts).
+    final row = LongMulPlan.rowOf(_sel);
+    if (row != null) {
+      for (var j = 1; j < _len(t.a); j++) {
+        final id = 'k${row}_$j';
+        if (plan.expected.containsKey(id)) items.add(_box(id, x(j) + 7, 2, cw - 14, kh - 6, 20));
+      }
+    }
     for (var i = 0; i < _len(t.a); i++) {
       items.add(text(x(i), 0, '${_dig(t.a, i)}'));
     }
@@ -922,9 +1099,10 @@ class _ColumnScreenState extends State<ColumnScreen> {
     items.add(text(x(w), 1, app.sign(Op.mul), color: C.pink));
     items.add(line(2));
     for (final id in plan.order) {
-      final row = id.startsWith('m0') ? 2 : (id.startsWith('m1') ? 3 : 4);
+      if (id.startsWith('k')) continue;
+      final r = id.startsWith('m0') ? 2 : (id.startsWith('m1') ? 3 : 4);
       final col = int.parse(id.split('_')[1]);
-      items.add(_box(id, x(col) + 3, y(row) + 4, cw - 6, rh - 8, 30));
+      items.add(_box(id, x(col) + 3, y(r) + 4, cw - 6, rh - 8, 30));
     }
     items.add(text(x(w), 3, '+', color: C.pink));
     items.add(line(4));
@@ -941,6 +1119,7 @@ class _ColumnScreenState extends State<ColumnScreen> {
     final layout = app.divLayout;
     final n = plan.digits.length;
     final qn = plan.steps.length;
+    final qTotal = n - plan.firstPos; // digits of the result
     final dv = '${plan.task.b}';
     final dl = dv.length;
     const cw = 44.0;
@@ -950,8 +1129,8 @@ class _ColumnScreenState extends State<ColumnScreen> {
     final base = top + 1; // first row of the steps
     final rightCols = switch (layout) {
       'pl' => n + 1 + dl,
-      'de' => n + 2 + dl + qn,
-      'pot' => n + math.max(qn, dl) + 1,
+      'de' => n + 2 + dl + qTotal,
+      'pot' => n + math.max(qTotal, dl) + 1,
       _ => n,
     };
     final rows = base + 2 * qn;
@@ -1016,7 +1195,7 @@ class _ColumnScreenState extends State<ColumnScreen> {
         items.add(Positioned(
           left: x(n) + 6,
           top: y(top + 1) - 1.5,
-          width: math.max(qn, dl) * cw + 12,
+          width: math.max(qTotal, dl) * cw + 12,
           height: 3,
           child: Container(color: C.ink),
         ));
@@ -1029,9 +1208,9 @@ class _ColumnScreenState extends State<ColumnScreen> {
         case 'pl' || 'en':
           field('q$k', s.pos, 0);
         case 'de':
-          field('q$k', n + 2 + dl + k, top);
+          field('q$k', n + 2 + dl + s.pos - plan.firstPos, top);
         default:
-          field('q$k', n + k, top + 1, dx: 12);
+          field('q$k', n + s.pos - plan.firstPos, top + 1, dx: 12);
       }
       final pRow = base + 2 * k;
       final rRow = pRow + 1;

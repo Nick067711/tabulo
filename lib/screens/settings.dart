@@ -440,7 +440,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
         ),
       ],
+      const SizedBox(height: 26),
+      SectionLabel(app.t('advance_title')),
+      _advanceCard(
+        app,
+        title: app.t('advance_mental'),
+        auto: app.mentalAuto,
+        onAuto: (v) => app.setAdvance(mAuto: v),
+        options: [for (final ms in AppState.mentalDelays) (ms, ms % 1000 == 0 ? '${ms ~/ 1000} s' : '${ms / 1000} s'.replaceAll('.', app.lang == 'en' ? '.' : ','))],
+        value: app.mentalDelayMs,
+        onValue: (v) => app.setAdvance(mDelay: v),
+      ),
+      const SizedBox(height: 10),
+      _advanceCard(
+        app,
+        title: app.t('advance_column'),
+        auto: app.columnAuto,
+        onAuto: (v) => app.setAdvance(cAuto: v),
+        options: [for (final sec in AppState.columnDelays) (sec, '$sec s')],
+        value: app.columnDelayS,
+        onValue: (v) => app.setAdvance(cDelay: v),
+      ),
     ]);
+  }
+
+  /// "Tap Next" or "by itself after …" for one kind of exercise.
+  Widget _advanceCard(
+    AppState app, {
+    required String title,
+    required bool auto,
+    required ValueChanged<bool> onAuto,
+    required List<(int, String)> options,
+    required int value,
+    required ValueChanged<int> onValue,
+  }) {
+    return CardBox(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text(title, style: ts(16)),
+        const SizedBox(height: 10),
+        Gap(gap: 8, children: [
+          Pick(label: app.t('advance_tap'), on: !auto, color: C.blue, dark: C.blueD, height: 50, fontSize: 14, onTap: () => onAuto(false)),
+          Pick(label: app.t('advance_auto'), on: auto, color: C.blue, dark: C.blueD, height: 50, fontSize: 14, onTap: () => onAuto(true)),
+        ]),
+        if (auto) ...[
+          const SizedBox(height: 10),
+          Text(app.t('advance_after'), style: ts(13, color: C.inkSoft, weight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          Gap(gap: 6, children: [
+            for (final o in options)
+              Pick(label: o.$2, on: value == o.$1, height: 44, fontSize: 14, onTap: () => onValue(o.$1)),
+          ]),
+        ],
+      ]),
+    );
   }
 
   // ---------------- Quiz ----------------

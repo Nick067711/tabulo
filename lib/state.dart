@@ -269,6 +269,15 @@ class AppState extends ChangeNotifier {
   String divSign = '÷';
   /// How long division is written: pl (default), en, de or pot (FR, ES, UA).
   String divLayout = 'pl';
+
+  /// Moving on to the next task. Mental (+ − × ÷ from the menu): by itself after [mentalDelayMs]
+  /// by default. Written (column): after tapping "Next" by default, or after [columnDelayS].
+  bool mentalAuto = true;
+  int mentalDelayMs = 1000;
+  bool columnAuto = false;
+  int columnDelayS = 5;
+  static const mentalDelays = [500, 1000, 2000, 3000, 5000];
+  static const columnDelays = [3, 5, 10, 15];
   List<Profile> profiles = [];
   String? activeId;
   List<ModuleConfig> modules = [
@@ -329,6 +338,7 @@ class AppState extends ChangeNotifier {
         'mul': mulSign,
         'div': divSign,
         'dl': divLayout,
+        'adv': {'ma': mentalAuto, 'md': mentalDelayMs, 'ca': columnAuto, 'cd': columnDelayS},
         'profiles': profiles.map((p) => p.toJson()).toList(),
         'active': activeId,
         'modules': modules.map((m) => m.toJson()).toList(),
@@ -352,6 +362,13 @@ class AppState extends ChangeNotifier {
     divSign = '${j['div'] ?? ':'}';
     divLayout = '${j['dl'] ?? 'pl'}';
     if (!divLayouts.contains(divLayout)) divLayout = 'pl';
+    final adv = j['adv'] is Map ? Map<String, dynamic>.from(j['adv'] as Map) : <String, dynamic>{};
+    mentalAuto = adv['ma'] != false;
+    mentalDelayMs = _int(adv['md'], 1000);
+    if (!mentalDelays.contains(mentalDelayMs)) mentalDelayMs = 1000;
+    columnAuto = adv['ca'] == true;
+    columnDelayS = _int(adv['cd'], 5);
+    if (!columnDelays.contains(columnDelayS)) columnDelayS = 5;
     if (j['sv'] != 2) applyDefaultSigns(); // older test builds used other defaults
     profiles = list('profiles').map(Profile.fromJson).toList();
     activeId = j['active'] as String?;
@@ -384,6 +401,10 @@ class AppState extends ChangeNotifier {
     archives = [];
     tableGames = {};
     divLayout = 'pl';
+    mentalAuto = true;
+    mentalDelayMs = 1000;
+    columnAuto = false;
+    columnDelayS = 5;
     notifyListeners();
   }
 
@@ -415,6 +436,14 @@ class AppState extends ChangeNotifier {
 
   void setDivLayout(String l) {
     divLayout = l;
+    _changed();
+  }
+
+  void setAdvance({bool? mAuto, int? mDelay, bool? cAuto, int? cDelay}) {
+    if (mAuto != null) mentalAuto = mAuto;
+    if (mDelay != null) mentalDelayMs = mDelay;
+    if (cAuto != null) columnAuto = cAuto;
+    if (cDelay != null) columnDelayS = cDelay;
     _changed();
   }
 

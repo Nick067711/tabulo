@@ -170,14 +170,13 @@ class Gen {
           // Two-digit multiplier without a 0 (no row of zeros).
           return Task(Op.mul, rnd(lo, hi), rnd(1, 9) * 10 + rnd(1, 9));
         case Op.div:
-          // The result has no zero digits (no "0 steps"), so every step really divides.
+          // Zeros in the result are allowed (612 : 3 = 204); they are written within a step.
           for (var i = 0; i < 1000; i++) {
             final d = two ? rnd(11, 99) : rnd(2, 9);
             final r = rem ? rnd(1, d - 1) : 0;
             final qMax = (hi - r) ~/ d;
             if (qMax < 2) continue;
             final q = rnd(2, qMax);
-            if ('$q'.contains('0')) continue;
             final a = q * d + r;
             if (a < lo || a > hi) continue;
             return Task(Op.div, a, d);

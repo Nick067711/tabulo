@@ -164,6 +164,7 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
   int _good = 0;
   late int _start;
   Timer? _timer;
+  bool _hint = false; // hint card for the current task ("i" button)
 
   @override
   void initState() {
@@ -192,6 +193,7 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
   void _prepare() {
     _val = '';
     _picked = null;
+    _hint = false;
     _opts = widget.choice ? Gen.options(_task) : [];
   }
 
@@ -206,10 +208,15 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
         _mistakes.add(Mistake(_task, given));
       }
     });
-    _timer = Timer(Duration(milliseconds: ok ? 600 : 1300), _next);
+    // By default the next task comes by itself (Settings › Exercises); a wrong answer stays a bit longer.
+    final app = AppScope.read(context);
+    if (app.mentalAuto) {
+      _timer = Timer(Duration(milliseconds: app.mentalDelayMs + (ok ? 0 : 1000)), _next);
+    }
   }
 
   void _next() {
+    _timer?.cancel();
     if (!mounted) return;
     if (_idx + 1 >= _tasks.length) {
       _finish();
@@ -289,6 +296,8 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
                     decoration: BoxDecoration(color: C.ink, borderRadius: BorderRadius.circular(14)),
                     child: Text('${app.t('left')} $left', style: ts(15, color: Colors.white)),
                   ),
+                  const SizedBox(width: 8),
+                  HintButton(on: _hint, onTap: () => setState(() => _hint = !_hint)),
                 ]),
               ),
               const SizedBox(height: 14),
@@ -302,12 +311,20 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
                         border: Border.all(color: C.sand, width: 2),
                       ),
                       padding: const EdgeInsets.all(16),
-                      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      child: Center(
+                       child: SingleChildScrollView(
+                        child: Column(mainAxisSize: MainAxisSize.min, children: [
                         Text(_task.missing ? app.t('which_number') : app.t('how_much'),
                             style: ts(16, color: C.inkSoft, weight: FontWeight.w800)),
                         const SizedBox(height: 16),
                         TaskLine(task: _task, typed: widget.choice ? '?' : _val, boxColor: color, signColor: color),
+                        if (_hint) ...[
+                          const SizedBox(height: 18),
+                          HintCard(text: mentalHint(app, _task)),
+                        ],
                       ]),
+                      ),
+                      ),
                     ),
                   ),
                   if (_flash != null)
@@ -315,7 +332,17 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
                 ]),
               ),
               const SizedBox(height: 16),
-              if (widget.choice)
+              if (_flash != null && !app.mentalAuto)
+                Chunky(
+                  height: 72,
+                  color: color,
+                  shadow: C.opD(_op),
+                  radius: 24,
+                  depth: 7,
+                  onTap: _next,
+                  child: Text('${app.t('next')}  ›', style: ts(26, color: Colors.white)),
+                )
+              else if (widget.choice)
                 Column(children: [
                   Gap(gap: 14, children: [_optBtn(0), _optBtn(1)]),
                   const SizedBox(height: 8),
@@ -483,5 +510,96 @@ class SummaryScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+
+/// The "i" button that shows or hides a hint.
+class HintButton extends StatelessWidget {
+  final bool on;
+  final VoidCallback onTap;
+  const HintButton({super.key, required this.on, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    return Tooltip(
+      message: app.t('hint_btn'),
+      child: Chunky(
+        width: 48,
+        height: 44,
+        radius: 14,
+        depth: 4,
+        color: on ? C.yellow : Colors.white,
+        shadow: on ? C.yellowD : C.line,
+        border: on ? C.yellow : C.line,
+        onTap: onTap,
+        child: Text('i', textScaler: TextScaler.noScaling, style: tsBox(26, color: C.ink).copyWith(fontStyle: FontStyle.italic, fontFamily: 'serif')),
+      ),
+    );
+  }
+}
+
+class HintCard extends StatelessWidget {
+  final String text;
+  const HintCard({super.key, required this.text});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF7DD),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: C.yellow, width: 2),
+        ),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Icon(Icons.lightbulb_outline_rounded, color: Color(0xFFB07800)),
+          const SizedBox(width: 10),
+          Expanded(child: Text(text, style: ts(15, weight: FontWeight.w800, height: 1.35))),
+        ]),
+      );
+}
+
+/// A hint for a mental task: a way to work it out, without simply giving the answer.
+String mentalHint(AppState app, Task t) {
+  String f(String key, Map<String, Object> v) {
+    var s = app.t(key);
+    v.forEach((k, val) => s = s.replaceAll('{$k}', '$val'));
+    return s;
+  }
+
+  final m = app.sign(Op.mul);
+  final d = app.sign(Op.div);
+  final a = t.a, b = t.b, c = t.result;
+  if (t.missing) {
+    return switch (t.op) {
+      Op.add => f('h_miss_add', {'a': a, 'c': c}),
+      Op.sub => f('h_miss_sub', {'a': a, 'c': c}),
+      Op.mul => f('h_miss_mul', {'a': a, 'c': c, 'd': d}),
+      Op.div => f('h_miss_div', {'a': a, 'c': c, 'd': d}),
+    };
+  }
+  switch (t.op) {
+    case Op.add:
+      if (b >= 10) return f('h_add_tens', {'a': a, 't': b - b % 10, 'x': a + b - b % 10, 'u': b % 10});
+      final room = 10 - a % 10;
+      if (b > room) return f('h_add_fill', {'a': a, 'k': room, 'x': a + room, 'u': b - room});
+      return f('h_add_units', {'e': '${a % 10} + $b = ${a % 10 + b}'});
+    case Op.sub:
+      if (b >= 10) return f('h_sub_tens', {'a': a, 't': b - b % 10, 'x': a - (b - b % 10), 'u': b % 10});
+      final units = a % 10;
+      if (b > units && a >= 10) return f('h_sub_fill', {'a': a, 'k': units, 'x': a - units, 'u': b - units});
+      return f('h_sub_units', {'e': '$units − $b = ${units - b}'});
+    case Op.mul:
+      if (a == 1 || b == 1) return app.t('h_mul_1');
+      if (a == 10 || b == 10) return app.t('h_mul_10');
+      if (a == 0 || b == 0) return app.t('h_mul_0');
+      if (a == 2) return f('h_mul_double', {'b': b});
+      if (b == 2) return f('h_mul_double', {'b': a});
+      return f('h_mul_step', {'e': '${a - 1} $m $b = ${(a - 1) * b}', 'b': b});
+    case Op.div:
+      if (b == 1) return app.t('h_div_1');
+      return f('h_div', {'a': a, 'b': b, 'm': m});
   }
 }
