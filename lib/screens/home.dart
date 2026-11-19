@@ -202,7 +202,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: ts(15, color: const Color(0xFF4A3A00), weight: FontWeight.w700, height: 1.2)),
                     ]),
                   ),
-                  Text(app.sign(Op.mul), style: ts(64, height: 1)),
+                  const TableGlyph(),
                 ]),
               ),
               const SizedBox(height: 16),
@@ -330,5 +330,43 @@ class StarsRules extends StatelessWidget {
         row(0, app.t('stars_record')),
       ]),
     );
+  }
+}
+
+
+/// A small picture of a multiplication table: blue top row, pink left column, white products.
+class TableGlyph extends StatelessWidget {
+  const TableGlyph({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    const cell = 19.0;
+    const gap = 2.5;
+    Widget box(Color bg, String s, Color fg) => Container(
+          width: cell,
+          height: cell,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(5)),
+          child: Text(s, textScaler: TextScaler.noScaling, style: tsBox(11, color: fg)),
+        );
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      for (var r = 0; r < 4; r++)
+        Padding(
+          padding: EdgeInsets.only(bottom: r < 3 ? gap : 0),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            for (var c = 0; c < 4; c++)
+              Padding(
+                padding: EdgeInsets.only(right: c < 3 ? gap : 0),
+                child: r == 0 && c == 0
+                    ? box(Colors.transparent, '×', C.ink)
+                    : r == 0
+                        ? box(C.blue, '$c', Colors.white)
+                        : c == 0
+                            ? box(C.pink, '$r', Colors.white)
+                            : box(Colors.white, '${r * c}', C.ink),
+              ),
+          ]),
+        ),
+    ]);
   }
 }

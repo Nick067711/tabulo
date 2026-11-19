@@ -76,6 +76,13 @@ class _ParentGateState extends State<ParentGate> {
               Text(app.t('gate_type'), style: ts(16, color: C.soft2, weight: FontWeight.w700), textAlign: TextAlign.center),
               const SizedBox(height: 8),
               Text(words, style: ts(24, color: C.yellow), textAlign: TextAlign.center),
+              // English too, in case the language was switched by accident.
+              if (app.lang != 'en')
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text('(${numberWords(_target, 'en')})',
+                      style: ts(15, color: C.soft2, weight: FontWeight.w700), textAlign: TextAlign.center),
+                ),
               const SizedBox(height: 16),
               Container(
                 constraints: const BoxConstraints(minWidth: 170),

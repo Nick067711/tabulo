@@ -1174,7 +1174,8 @@ class _ColumnScreenState extends State<ColumnScreen> {
         for (var j = 0; j < dl; j++) {
           items.add(text(x(n + 1 + j), top, dv[j]));
         }
-        items.add(hLine(0, n, top));
+        // In Poland the line over the dividend reaches almost to the ":".
+        items.add(hLine(0, n + 0.6, top));
       case 'en':
         for (var j = 0; j < dl; j++) {
           items.add(text(x(-1 - dl + j), top, dv[j]));

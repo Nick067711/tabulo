@@ -173,43 +173,89 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ]),
         const SizedBox(height: 4),
       ],
-      Text(app.t('div_layout_info'), style: ts(13, color: C.inkSoft, weight: FontWeight.w700, height: 1.35)),
+      if (!app.purchased) ...[
+        const SizedBox(height: 22),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(color: C.redBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: C.red, width: 2)),
+          child: Row(children: [
+            const Icon(Icons.info_outline_rounded, color: C.red),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                app.trialActive
+                    ? app.t('version_trial').replaceAll('{h}', '${app.trialHoursLeft}')
+                    : app.t('version_basic'),
+                style: ts(14, color: C.red, weight: FontWeight.w800, height: 1.35),
+              ),
+            ),
+          ]),
+        ),
+      ],
       const SizedBox(height: 22),
-      SectionLabel(app.t('test_tools'), color: C.inkSoft),
-      Text(app.t('test_tools_info'), style: ts(13, color: C.inkSoft, weight: FontWeight.w700)),
-      const SizedBox(height: 8),
-      Wrap(spacing: 8, runSpacing: 8, children: [
-        OutlinedButton(onPressed: app.endTrialNow, child: Text(app.t('tool_end_trial'))),
-        if (app.purchased) OutlinedButton(onPressed: app.undoPurchase, child: Text(app.t('tool_undo_buy'))),
-        OutlinedButton(
+      Center(
+        child: OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: C.red,
+            side: const BorderSide(color: C.red, width: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
+          icon: const Icon(Icons.delete_forever_rounded),
+          label: Text(app.t('tool_reset'), style: ts(15, color: C.red)),
           onPressed: () async {
             final nav = Navigator.of(context);
+            // Asked twice, so the data cannot be erased by one accidental tap.
             final ok = await confirmDialog(context, app.t('tool_reset'), app.t('tool_reset_text'), app.t('tool_reset_yes'), app.t('cancel'));
-            if (!ok) return;
+            if (!ok || !context.mounted) return;
+            final sure = await confirmDialog(context, app.t('tool_reset_q2'), app.t('tool_reset_q2_text'), 'OK', app.t('cancel'));
+            if (!sure) return;
             await app.resetAll();
             nav.popUntil((r) => r.isFirst);
           },
-          child: Text(app.t('tool_reset'), style: const TextStyle(color: C.red)),
         ),
-      ]),
+      ),
     ]);
   }
 
-  /// A tiny sample of how 468 : 3 is written in the given layout.
+  /// A tiny sample of how 468 : 3 is written in the given layout, with solid lines.
   Widget _layoutChild(AppState app, String l, bool on) {
     final d = app.sign(Op.div);
-    final sample = switch (l) {
-      'pl' => ' 156\n ‾‾‾\n 468 $d 3',
-      'en' => '    156\n   ‾‾‾\n3 ) 468',
-      'de' => '468 $d 3 = 156',
-      _ => '468 │ 3  \n    ├────\n    │ 156',
+    final c = on ? Colors.white : C.ink;
+    final st = TextStyle(fontFamily: 'monospace', fontSize: 15, height: 1.2, fontWeight: FontWeight.w800, color: c);
+    Text t(String s) => Text(s, textScaler: TextScaler.noScaling, style: st);
+    Widget hl([double w = 0]) => Container(height: 2, width: w == 0 ? null : w, color: c);
+    Widget vl(double h) => Container(width: 2, height: h, color: c);
+    // number with a line above it, the line reaching a bit further than the digits
+    Widget over(String top, String bottom) => IntrinsicWidth(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [t(top), hl(), t(bottom)]),
+        );
+    final Widget sample = switch (l) {
+      'pl' => Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
+          over('156  ', '468 '),
+          t('$d 3'),
+        ]),
+      'en' => Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
+          t('3)'),
+          over('156', '468'),
+        ]),
+      'de' => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          t('468 $d 3 = 156'),
+          t('-3'),
+          t(' 16'),
+        ]),
+      _ => Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          t('468 '),
+          vl(38),
+          IntrinsicWidth(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [t(' 3  '), hl(), t(' 156')]),
+          ),
+        ]),
     };
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6),
       child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Text(sample,
-            textScaler: TextScaler.noScaling,
-            style: TextStyle(fontFamily: 'monospace', fontSize: 15, height: 1.15, fontWeight: FontWeight.w800, color: on ? Colors.white : C.ink)),
+        sample,
         const SizedBox(height: 8),
         FittedBox(
           fit: BoxFit.scaleDown,

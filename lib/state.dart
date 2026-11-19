@@ -394,8 +394,8 @@ class AppState extends ChangeNotifier {
     modules = [ModuleConfig(range: 1), ModuleConfig(range: 1), ModuleConfig(), ModuleConfig()];
     quizCount = 100;
     quizSince = DateTime.now().millisecondsSinceEpoch;
-    trialStart = null;
-    purchased = false;
+    // The trial date and the purchase stay: erasing data must not start a new trial
+    // or take away what was bought.
     sessions = [];
     board = [];
     archives = [];
@@ -405,6 +405,7 @@ class AppState extends ChangeNotifier {
     mentalDelayMs = 1000;
     columnAuto = false;
     columnDelayS = 5;
+    await _save(); // keeps only the trial date and the purchase
     notifyListeners();
   }
 
