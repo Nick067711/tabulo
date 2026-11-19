@@ -144,9 +144,10 @@ class Gen {
     return out;
   }
 
-  /// Tasks for written (column) arithmetic. [digits] = digits of the first number
-  /// (for ÷ the dividend); × and ÷ use a one-digit second number (2–9).
-  static List<Task> column(Op op, int digits, int count) {
+  /// Tasks for written (column) arithmetic. [digits] = digits of the first number (for ÷ the dividend).
+  /// × and ÷ use a one-digit second number (2–9), or a two-digit one with [two].
+  /// [rem]: division with a remainder.
+  static List<Task> column(Op op, int digits, int count, {bool two = false, bool rem = false}) {
     final lo = pow(10, digits - 1).toInt();
     final hi = pow(10, digits).toInt() - 1;
     final picker = NoRepeat();
@@ -165,18 +166,23 @@ class Gen {
           }
           return Task(Op.sub, a, b);
         case Op.mul:
-          return Task(Op.mul, rnd(lo, hi), rnd(2, 9));
+          if (!two) return Task(Op.mul, rnd(lo, hi), rnd(2, 9));
+          // Two-digit multiplier without a 0 (no row of zeros).
+          return Task(Op.mul, rnd(lo, hi), rnd(1, 9) * 10 + rnd(1, 9));
         case Op.div:
-          // Exact division whose result has no zero digits (no "0 steps" for beginners).
-          for (var i = 0; i < 500; i++) {
-            final d = rnd(2, 9);
-            final q = rnd((lo + d - 1) ~/ d, hi ~/ d);
-            if (q < 2 || '$q'.contains('0')) continue;
-            final a = q * d;
+          // The result has no zero digits (no "0 steps"), so every step really divides.
+          for (var i = 0; i < 1000; i++) {
+            final d = two ? rnd(11, 99) : rnd(2, 9);
+            final r = rem ? rnd(1, d - 1) : 0;
+            final qMax = (hi - r) ~/ d;
+            if (qMax < 2) continue;
+            final q = rnd(2, qMax);
+            if ('$q'.contains('0')) continue;
+            final a = q * d + r;
             if (a < lo || a > hi) continue;
             return Task(Op.div, a, d);
           }
-          return digits == 2 ? const Task(Op.div, 84, 4) : (digits == 3 ? const Task(Op.div, 468, 3) : const Task(Op.div, 2448, 4));
+          return Task(Op.div, digits <= 2 ? 84 : (digits == 3 ? 468 : 2448), two ? 12 : 4);
       }
     }
 

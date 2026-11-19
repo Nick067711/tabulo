@@ -427,7 +427,12 @@ class AppState extends ChangeNotifier {
 
   String opName(Op op) => t('op_${op.name}');
 
-  String fullText(Task task) => '${task.a} ${sign(task.op)} ${task.b} = ${task.result}';
+  String fullText(Task task) {
+    final base = '${task.a} ${sign(task.op)} ${task.b} = ${task.result}';
+    // Long division with a remainder: "470 : 3 = 156 r. 2".
+    if (task.op == Op.div && task.b != 0 && task.a % task.b != 0) return '$base ${t('rem_short')} ${task.a % task.b}';
+    return base;
+  }
 
   // ---------- trial and purchase ----------
 

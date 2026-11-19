@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -16,26 +17,34 @@ int _pow10(int i) {
 }
 
 int _dig(int x, int i) => (x ~/ _pow10(i)) % 10;
+int _len(int x) => '$x'.length;
 
 /// Values of the small boxes above the columns: +1 carried when adding, −1 borrowed when subtracting.
 const markPlus = '+1';
 const markMinus = '−1';
 
-/// Expected values for written addition, subtraction and multiplication by a one-digit number.
+/// Written addition, subtraction and multiplication by a one-digit number.
+/// Cells: r{i} result digits (i = column from the right), c{i} small boxes above column i.
 class ColumnPlan {
   final Task task;
   final int width;
-  final Map<String, String> expected; // c1..cN carry/borrow marks, r0..rN result digits
-  final List<String> order; // order of cells for the "next" button
-  ColumnPlan._(this.task, this.width, this.expected, this.order);
+  final Map<String, String> expected;
+  final List<int> carryIn; // what comes into each column from the one on its right
+  final List<String> order;
+  ColumnPlan._(this.task, this.width, this.expected, this.carryIn, this.order);
 
   factory ColumnPlan(Task t) {
     final res = t.result;
-    final w = [t.a, t.b, res].map((v) => '$v'.length).reduce((a, b) => a > b ? a : b);
+    final numLen = math.max(_len(t.a), t.op == Op.mul ? 1 : _len(t.b));
+    final w = math.max(numLen, _len(res));
     final exp = <String, String>{};
+    final carryIn = <int>[];
     var carry = 0;
     for (var i = 0; i < w; i++) {
-      if (i > 0) {
+      carryIn.add(carry);
+      // A small box only above columns that still have digits of the numbers. Over an empty
+      // column the carried value is written straight into the result.
+      if (i > 0 && i < numLen) {
         exp['c$i'] = carry == 0
             ? ''
             : switch (t.op) {
@@ -57,9 +66,9 @@ class ColumnPlan {
     final order = <String>[];
     for (var i = 0; i < w; i++) {
       order.add('r$i');
-      if (i + 1 < w) order.add('c${i + 1}');
+      if (exp.containsKey('c${i + 1}')) order.add('c${i + 1}');
     }
-    return ColumnPlan._(t, w, exp, order);
+    return ColumnPlan._(t, w, exp, carryIn, order);
   }
 
   bool isRight(String cell, String value) {
@@ -69,6 +78,50 @@ class ColumnPlan {
   }
 }
 
+/// Multiplication by a two-digit number: two partial products, then their sum.
+/// Cells: m0_{i}, m1_{i} (rows of partial products, i = column from the right), s_{i} the sum.
+class LongMulPlan {
+  final Task task;
+  final int width;
+  final Map<String, String> expected;
+  final Map<String, int> carryIn;
+  final List<String> order;
+  LongMulPlan._(this.task, this.width, this.expected, this.carryIn, this.order);
+
+  factory LongMulPlan(Task t) {
+    final bd = [t.b % 10, t.b ~/ 10];
+    final prods = [t.a * bd[0], t.a * bd[1]];
+    final sum = t.a * t.b;
+    final w = math.max(_len(sum), math.max(_len(prods[0]), _len(prods[1]) + 1));
+    final exp = <String, String>{};
+    final cin = <String, int>{};
+    final order = <String>[];
+    for (var r = 0; r < 2; r++) {
+      var carry = 0;
+      for (var j = 0; j < _len(prods[r]); j++) {
+        final id = 'm${r}_${j + r}';
+        exp[id] = '${_dig(prods[r], j)}';
+        cin[id] = carry;
+        carry = (_dig(t.a, j) * bd[r] + carry) ~/ 10;
+        order.add(id);
+      }
+    }
+    var carry = 0;
+    for (var i = 0; i < _len(sum); i++) {
+      final id = 's_$i';
+      exp[id] = '${_dig(sum, i)}';
+      cin[id] = carry;
+      final v = _dig(prods[0], i) + (i >= 1 ? _dig(prods[1], i - 1) : 0) + carry;
+      carry = v ~/ 10;
+      order.add(id);
+    }
+    return LongMulPlan._(t, w, exp, cin, order);
+  }
+
+  int prod(int r) => task.a * (r == 0 ? task.b % 10 : task.b ~/ 10);
+  bool isRight(String id, String v) => v == (expected[id] ?? '');
+}
+
 /// One step of long division: how many times the divisor fits into [cur].
 class DivStep {
   final int pos; // index (from the left) of the last dividend digit used in this step
@@ -76,16 +129,16 @@ class DivStep {
   const DivStep(this.pos, this.cur, this.q, this.prod, this.rem);
 }
 
-/// Expected values for long division by a one-digit number.
-/// Fields: q{k} quotient digit, p{k} product, r{k} remainder of step k.
+/// Long division. Fields q{k} (quotient digit), p{k} (product), r{k} (difference) of step k;
+/// each field has one box per digit: "p0.0", "p0.1"…, filled from the left.
 class DivPlan {
   final Task task;
   final List<int> digits;
   final List<DivStep> steps;
-  final Map<String, String> expected;
-  final Map<String, int> maxLen;
+  final Map<String, int> fieldLen;
+  final Map<String, String> expected; // per box
   final List<String> order;
-  DivPlan._(this.task, this.digits, this.steps, this.expected, this.maxLen, this.order);
+  DivPlan._(this.task, this.digits, this.steps, this.fieldLen, this.expected, this.order);
 
   factory DivPlan(Task t) {
     final ds = '${t.a}'.split('').map(int.parse).toList();
@@ -106,34 +159,33 @@ class DivPlan {
       pos++;
       cur = r * 10 + ds[pos];
     }
+    final flen = <String, int>{};
     final exp = <String, String>{};
-    final len = <String, int>{};
     final order = <String>[];
+    void add(String f, String value, int len) {
+      flen[f] = len;
+      for (var j = 0; j < len; j++) {
+        final id = '$f.$j';
+        exp[id] = value.isEmpty ? '' : value[j];
+        order.add(id);
+      }
+    }
+
     for (var k = 0; k < steps.length; k++) {
       final s = steps[k];
       final last = k == steps.length - 1;
-      exp['q$k'] = '${s.q}';
-      len['q$k'] = 1;
-      exp['p$k'] = '${s.prod}';
-      len['p$k'] = '${s.prod}'.length;
-      // An intermediate remainder of 0 may be left empty.
-      exp['r$k'] = !last && s.rem == 0 ? '' : '${s.rem}';
-      len['r$k'] = '${s.rem}'.length;
-      order.addAll(['q$k', 'p$k', 'r$k']);
+      add('q$k', '${s.q}', 1);
+      add('p$k', '${s.prod}', _len(s.prod));
+      // An intermediate difference of 0 may be left empty.
+      add('r$k', !last && s.rem == 0 ? '' : '${s.rem}', _len(s.rem));
     }
-    return DivPlan._(t, ds, steps, exp, len, order);
+    return DivPlan._(t, ds, steps, flen, exp, order);
   }
 
   bool isRight(String id, String value) {
     final e = expected[id] ?? '';
     if (e.isEmpty) return value.isEmpty || value == '0';
     return value == e;
-  }
-
-  /// The field is filled in as far as the expected answer goes.
-  bool isFull(String id, String value) {
-    final e = expected[id] ?? '';
-    return e.isEmpty ? value.isNotEmpty : value.length >= e.length;
   }
 }
 
@@ -147,10 +199,13 @@ class ColumnScreen extends StatefulWidget {
 class _ColumnScreenState extends State<ColumnScreen> {
   Op _op = Op.add;
   int _digits = 3;
+  bool _two = false; // × / ÷ by a two-digit number
+  bool _rem = false; // ÷ with a remainder
   bool _started = false;
   List<Task> _tasks = [];
   int _idx = 0;
   ColumnPlan? _plan;
+  LongMulPlan? _lm;
   DivPlan? _div;
   final Map<String, String> _vals = {};
   String? _sel;
@@ -178,48 +233,68 @@ class _ColumnScreenState extends State<ColumnScreen> {
   }
 
   Task get _task => _tasks[_idx];
-  bool get _isDiv => _task.op == Op.div;
-  List<String> get _order => _isDiv ? _div!.order : _plan!.order;
-  Map<String, String> get _expected => _isDiv ? _div!.expected : _plan!.expected;
-  bool _right(String id, String v) => _isDiv ? _div!.isRight(id, v) : _plan!.isRight(id, v);
+  List<String> get _order => _div?.order ?? _lm?.order ?? _plan!.order;
+  Map<String, String> get _expected => _div?.expected ?? _lm?.expected ?? _plan!.expected;
+  bool _right(String id, String v) =>
+      _div != null ? _div!.isRight(id, v) : (_lm != null ? _lm!.isRight(id, v) : _plan!.isRight(id, v));
 
   void _begin(List<Task> tasks) {
     _tasks = tasks;
     _idx = 0;
+    _good = 0;
+    _mistakes.clear();
     _started = true;
     _start = DateTime.now().millisecondsSinceEpoch;
     _load();
   }
 
   void _load() {
-    if (_task.op == Op.div) {
-      _div = DivPlan(_task);
-      _plan = null;
-      _sel = 'q0';
+    final t = _task;
+    _plan = null;
+    _lm = null;
+    _div = null;
+    if (t.op == Op.div) {
+      _div = DivPlan(t);
+    } else if (t.op == Op.mul && t.b >= 10) {
+      _lm = LongMulPlan(t);
     } else {
-      _plan = ColumnPlan(_task);
-      _div = null;
-      _sel = 'r0';
+      _plan = ColumnPlan(t);
     }
+    _sel = _order.first;
     _vals.clear();
     _checked = false;
     _failedThis = false;
     _solved = false;
   }
 
+  /// Back during an exercise returns to the choice of operation, not to the main menu.
+  void _backToSetup() {
+    _timer?.cancel();
+    setState(() => _started = false);
+  }
+
   /// The +1 / −1 buttons are for addition and subtraction only.
-  bool get _usesMarkBar => _task.op == Op.add || _task.op == Op.sub;
+  bool get _usesMarkBar => _plan != null && (_task.op == Op.add || _task.op == Op.sub);
   bool get _onMark => (_sel ?? '').startsWith('c');
 
-  /// Digit from the keypad.
+  void _advance(String from) {
+    final i = _order.indexOf(from);
+    if (i >= 0 && i + 1 < _order.length) _sel = _order[i + 1];
+  }
+
+  /// Digit from the keypad: one digit per box, then on to the next box.
   void _type(String d) {
     final s = _sel;
     if (s == null || _solved) return;
-    if (_isDiv) {
-      _typeDiv(s, d);
+    final plan = _plan;
+    if (plan == null) {
+      setState(() {
+        _vals[s] = d;
+        _checked = false;
+        _advance(s);
+      });
       return;
     }
-    final plan = _plan!;
     // In + and − the small boxes take only +1 / −1 from their own buttons.
     if (s.startsWith('c') && _usesMarkBar) return;
     setState(() {
@@ -231,39 +306,29 @@ class _ColumnScreenState extends State<ColumnScreen> {
         return;
       }
       if (col + 1 >= plan.width) return;
+      final hasMark = plan.expected.containsKey('c${col + 1}');
       final noMark = (plan.expected['c${col + 1}'] ?? '').isEmpty;
-      // Nothing to carry or borrow and the digit is right: go straight to the next result box.
-      _sel = noMark && plan.isRight(s, d) ? 'r${col + 1}' : 'c${col + 1}';
+      // No small box, or nothing to carry and the digit is right: straight to the next result box.
+      _sel = !hasMark || (noMark && plan.isRight(s, d)) ? 'r${col + 1}' : 'c${col + 1}';
     });
   }
 
-  void _typeDiv(String s, String d) {
-    final plan = _div!;
-    final max = plan.maxLen[s] ?? 1;
-    var v = _vals[s] ?? '';
-    v = v.length >= max ? d : v + d;
-    setState(() {
-      _vals[s] = v;
-      _checked = false;
-      if (plan.isFull(s, v)) {
-        final i = plan.order.indexOf(s);
-        if (i >= 0 && i + 1 < plan.order.length) _sel = plan.order[i + 1];
-      }
-    });
-  }
-
+  /// Backspace: clears the selected box; on an empty box it steps back to the previous one.
   void _delete() {
     final s = _sel;
     if (s == null || _solved) return;
-    if (!_isDiv && s.startsWith('c') && _usesMarkBar) return;
+    if (s.startsWith('c') && _usesMarkBar) return;
     setState(() {
-      final v = _vals[s] ?? '';
-      if (_isDiv && v.length > 1) {
-        _vals[s] = v.substring(0, v.length - 1);
-      } else {
-        _vals.remove(s);
-      }
       _checked = false;
+      if ((_vals[s] ?? '').isNotEmpty) {
+        _vals.remove(s);
+        return;
+      }
+      final i = _order.indexOf(s);
+      if (i > 0) {
+        _sel = _order[i - 1];
+        _vals.remove(_sel);
+      }
     });
   }
 
@@ -341,6 +406,13 @@ class _ColumnScreenState extends State<ColumnScreen> {
     }
   }
 
+  String _setupDesc(AppState app) {
+    final parts = [app.opName(_op), app.t('digits_n').replaceAll('{n}', '$_digits')];
+    if (_op == Op.mul || _op == Op.div) parts.add(app.t(_two ? 'by_two_digit' : 'by_one_digit'));
+    if (_op == Op.div && _rem) parts.add(app.t('with_rem'));
+    return parts.join(' · ');
+  }
+
   void _finish() {
     final app = AppScope.read(context);
     final s = Session(
@@ -352,9 +424,7 @@ class _ColumnScreenState extends State<ColumnScreen> {
       total: _tasks.length,
       correct: _good,
       mistakes: List.of(_mistakes),
-      desc: widget.tasks != null
-          ? app.t('retry_desc')
-          : '${app.opName(_op)} · ${app.t('digits_n').replaceAll('{n}', '$_digits')}',
+      desc: widget.tasks != null ? app.t('retry_desc') : _setupDesc(app),
       stars: starsFor(_good, _tasks.length),
     );
     app.addSession(s);
@@ -366,11 +436,19 @@ class _ColumnScreenState extends State<ColumnScreen> {
     ));
   }
 
+  // ---------------- hints ----------------
+
+  String _mulExpr(AppState app, int da, int b, int carry) {
+    final m = app.sign(Op.mul);
+    final p = da * b;
+    return carry > 0 ? '$da $m $b = $p, $p + $carry = ${p + carry}' : '$da $m $b = $p';
+  }
+
   String _hint(AppState app) {
-    if (_isDiv) return _divHint(app);
+    if (_div != null) return _divHint(app);
+    if (_lm != null) return _lmHint(app);
     final plan = _plan!;
     final t = plan.task;
-    final m = app.sign(Op.mul);
     final sel = _sel ?? 'r0';
     if (sel.startsWith('c')) {
       return app.t(switch (t.op) {
@@ -379,114 +457,161 @@ class _ColumnScreenState extends State<ColumnScreen> {
         _ => 'hint_mark_mul',
       });
     }
-    final col = int.tryParse(sel.substring(1)) ?? 0;
+    final col = (int.tryParse(sel.substring(1)) ?? 0).clamp(0, plan.width - 1);
+    final cin = plan.carryIn[col];
     final da = _dig(t.a, col), db = _dig(t.b, col);
-    final markText = col > 0 ? (plan.expected['c$col'] ?? '') : '';
+    final numLen = math.max(_len(t.a), t.op == Op.mul ? 1 : _len(t.b));
+    if (col >= numLen) return app.t('hint_mul_last').replaceAll('{c}', '$cin');
     if (t.op == Op.mul) {
-      final carryIn = int.tryParse(markText) ?? 0;
-      if (t.a < _pow10(col)) {
-        return app.t('hint_mul_last').replaceAll('{c}', '$carryIn');
-      }
-      final v = da * t.b + carryIn;
-      final e = carryIn > 0 ? '$da $m ${t.b} = ${da * t.b}, ${da * t.b} + $carryIn = $v' : '$da $m ${t.b} = $v';
-      if (v >= 10 && col + 1 < plan.width) {
-        return app.t('hint_mul_carry').replaceAll('{e}', e).replaceAll('{d}', '${v % 10}').replaceAll('{c}', '${v ~/ 10}');
+      final v = da * t.b + cin;
+      final e = _mulExpr(app, da, t.b, cin);
+      if (v >= 10) {
+        final key = col + 1 < numLen ? 'hint_mul_carry' : 'hint_lm_carry';
+        return app.t(key).replaceAll('{e}', e).replaceAll('{d}', '${v % 10}').replaceAll('{c}', '${v ~/ 10}');
       }
       return app.t('hint_mul').replaceAll('{e}', e);
     }
-    final mark = markText.isEmpty ? 0 : 1;
     if (t.op == Op.add) {
-      final s = da + db + mark;
-      final plus = mark == 1 ? ' + 1' : '';
+      final s = da + db + cin;
+      final plus = cin == 1 ? ' + 1' : '';
       if (s >= 10) {
-        return app.t('hint_add_carry').replaceAll('{e}', '$da + $db$plus = $s').replaceAll('{d}', '${s % 10}');
+        final key = col + 1 < numLen ? 'hint_add_carry' : 'hint_add_carry_end';
+        return app.t(key).replaceAll('{e}', '$da + $db$plus = $s').replaceAll('{d}', '${s % 10}');
       }
       return app.t('hint_add').replaceAll('{e}', '$da + $db$plus = $s');
     }
-    final top = da - mark;
+    final top = da - cin;
     if (top < db) {
       return app.t('hint_sub_borrow').replaceAll('{e}', '${top + 10} − $db = ${top + 10 - db}');
     }
     return app.t('hint_sub').replaceAll('{e}', '$top − $db = ${top - db}');
   }
 
+  String _lmHint(AppState app) {
+    final plan = _lm!;
+    final t = plan.task;
+    final sel = _sel ?? plan.order.first;
+    final cin = plan.carryIn[sel] ?? 0;
+    if (sel.startsWith('m')) {
+      final r = sel[1] == '0' ? 0 : 1;
+      final col = int.parse(sel.split('_')[1]);
+      final j = col - r;
+      final bd = r == 0 ? t.b % 10 : t.b ~/ 10;
+      final pre = r == 1 && j == 0 ? '${app.t('hint_lm_shift')} ' : '';
+      if (j >= _len(t.a)) return pre + app.t('hint_mul_last').replaceAll('{c}', '$cin');
+      final da = _dig(t.a, j);
+      final v = da * bd + cin;
+      final e = _mulExpr(app, da, bd, cin);
+      if (v >= 10) {
+        return pre + app.t('hint_lm_carry').replaceAll('{e}', e).replaceAll('{d}', '${v % 10}').replaceAll('{c}', '${v ~/ 10}');
+      }
+      return pre + app.t('hint_lm').replaceAll('{e}', e);
+    }
+    final i = int.parse(sel.split('_')[1]);
+    final p0 = plan.prod(0), p1 = plan.prod(1);
+    final terms = <int>[];
+    if (i < _len(p0)) terms.add(_dig(p0, i));
+    if (i >= 1 && i - 1 < _len(p1)) terms.add(_dig(p1, i - 1));
+    if (terms.isEmpty) return app.t('hint_mul_last').replaceAll('{c}', '$cin');
+    if (cin > 0) terms.add(cin);
+    final v = terms.reduce((a, b) => a + b);
+    final e = '${terms.join(' + ')} = $v';
+    if (v >= 10 && i + 1 < _len(t.a * t.b)) {
+      return app.t('hint_ls_carry').replaceAll('{e}', e).replaceAll('{d}', '${v % 10}');
+    }
+    return app.t('hint_ls').replaceAll('{e}', e);
+  }
+
   String _divHint(AppState app) {
     final plan = _div!;
-    final sel = _sel ?? 'q0';
-    final k = int.tryParse(sel.substring(1)) ?? 0;
-    final s = plan.steps[k.clamp(0, plan.steps.length - 1)];
+    final f = (_sel ?? 'q0').split('.').first;
+    final k = (int.tryParse(f.substring(1)) ?? 0).clamp(0, plan.steps.length - 1);
+    final s = plan.steps[k];
     final d = plan.task.b;
-    if (sel.startsWith('q')) {
+    if (f.startsWith('q')) {
       return app.t('hint_div_q').replaceAll('{d}', '$d').replaceAll('{n}', '${s.cur}');
     }
-    if (sel.startsWith('p')) {
+    if (f.startsWith('p')) {
       return app.t('hint_div_p').replaceAll('{e}', '${s.q} ${app.sign(Op.mul)} $d').replaceAll('{n}', '${s.cur}');
     }
-    final last = k == plan.steps.length - 1;
-    return app.t(last ? 'hint_div_last' : 'hint_div_r').replaceAll('{e}', '${s.cur} − ${s.prod}');
+    if (k < plan.steps.length - 1) return app.t('hint_div_r').replaceAll('{e}', '${s.cur} − ${s.prod}');
+    final hasRem = plan.task.a % d != 0;
+    return app.t(hasRem ? 'hint_div_last_rem' : 'hint_div_last').replaceAll('{e}', '${s.cur} − ${s.prod}');
   }
+
+  // ---------------- screens ----------------
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     if (!_started) return _setup(app);
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TopBar(
-                title: app.t('column_title'),
-                actions: [Text('${_idx + 1}/${_tasks.length}', style: ts(16, color: C.inkSoft))],
-              ),
-              const SizedBox(height: 10),
-              CardBox(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Icon(Icons.lightbulb_outline_rounded, color: C.pink),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text(_hint(app), style: ts(15, weight: FontWeight.w800, height: 1.35))),
-                ]),
-              ),
-              const SizedBox(height: 10),
-              if (_usesMarkBar) ...[
-                _markBar(app),
-                const SizedBox(height: 6),
-              ],
-              Expanded(
-                child: Center(
-                  child: FittedBox(fit: BoxFit.scaleDown, child: _isDiv ? _divBoard(app) : _board(app)),
+    final inRetry = widget.tasks != null;
+    return PopScope(
+      canPop: inRetry,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _backToSetup();
+      },
+      child: Scaffold(
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TopBar(
+                  title: app.t('column_title'),
+                  actions: [Text('${_idx + 1}/${_tasks.length}', style: ts(16, color: C.inkSoft))],
                 ),
-              ),
-              const SizedBox(height: 8),
-              Keypad(
-                wide: true,
-                keyHeight: 54,
-                onDigit: _type,
-                onDelete: _delete,
-                onOk: _check,
-                extraIcon: Icons.arrow_forward_rounded,
-                onExtra: _moveNext,
-              ),
-              const SizedBox(height: 4),
-              Chunky(
-                height: 58,
-                color: _solved ? C.green : C.pink,
-                shadow: _solved ? C.greenD : C.pinkD,
-                radius: 20,
-                depth: 6,
-                onTap: _check,
-                child: _solved
-                    ? Column(mainAxisSize: MainAxisSize.min, children: [
-                        Text('✓ ${app.t('bravo')} ${app.fullText(_task)}',
-                            style: ts(16, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text('${app.t('next')}  ›  ($_nextIn)', style: ts(20, color: Colors.white)),
-                      ])
-                    : Text(_checked ? '✗ ${app.t('fix_red')}' : 'OK', style: ts(20, color: Colors.white)),
-              ),
-            ],
+                const SizedBox(height: 10),
+                CardBox(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Icon(Icons.lightbulb_outline_rounded, color: C.pink),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(_hint(app), style: ts(15, weight: FontWeight.w800, height: 1.35))),
+                  ]),
+                ),
+                const SizedBox(height: 10),
+                if (_usesMarkBar) ...[
+                  _markBar(app),
+                  const SizedBox(height: 6),
+                ],
+                Expanded(
+                  child: Center(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: _div != null ? _divBoard(app) : (_lm != null ? _lmBoard(app) : _board(app)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Keypad(
+                  wide: true,
+                  keyHeight: 54,
+                  onDigit: _type,
+                  onDelete: _delete,
+                  onOk: _check,
+                  extraIcon: Icons.arrow_forward_rounded,
+                  onExtra: _moveNext,
+                ),
+                const SizedBox(height: 4),
+                Chunky(
+                  height: 58,
+                  color: _solved ? C.green : C.pink,
+                  shadow: _solved ? C.greenD : C.pinkD,
+                  radius: 20,
+                  depth: 6,
+                  onTap: _check,
+                  child: _solved
+                      ? Column(mainAxisSize: MainAxisSize.min, children: [
+                          Text('✓ ${app.t('bravo')} ${app.fullText(_task)}',
+                              style: ts(16, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text('${app.t('next')}  ›  ($_nextIn)', style: ts(20, color: Colors.white)),
+                        ])
+                      : Text(_checked ? '✗ ${app.t('fix_red')}' : 'OK', style: ts(20, color: Colors.white)),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -547,7 +672,7 @@ class _ColumnScreenState extends State<ColumnScreen> {
       _ => app.t('how_many_digits'),
     };
     final info = switch (_op) {
-      Op.mul => app.t('column_info_mul'),
+      Op.mul => app.t(_two ? 'column_info_lm' : 'column_info_mul'),
       Op.div => app.t('column_info_div'),
       _ => app.t('column_info'),
     };
@@ -560,6 +685,9 @@ class _ColumnScreenState extends State<ColumnScreen> {
           fontSize: 16,
           onTap: () => setState(() => _op = op),
         );
+    Widget pinkPick(String label, bool on, VoidCallback tap) =>
+        Pick(label: label, on: on, color: C.pink, dark: C.pinkD, height: 52, fontSize: 16, onTap: tap);
+    final mulDiv = _op == Op.mul || _op == Op.div;
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -580,21 +708,32 @@ class _ColumnScreenState extends State<ColumnScreen> {
                     SectionLabel(digitsLabel),
                     Gap(children: [
                       for (final d in [2, 3, 4])
-                        Pick(
-                          label: app.t('digits_n').replaceAll('{n}', '$d'),
-                          on: _digits == d,
-                          color: C.pink,
-                          dark: C.pinkD,
-                          height: 56,
-                          fontSize: 16,
-                          onTap: () => setState(() => _digits = d),
-                        ),
+                        pinkPick(app.t('digits_n').replaceAll('{n}', '$d'), _digits == d, () => setState(() => _digits = d)),
                     ]),
-                    if (_op == Op.mul || _op == Op.div)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(app.t('one_digit_note'), style: ts(13, color: C.inkSoft, weight: FontWeight.w700)),
+                    if (mulDiv) ...[
+                      const SizedBox(height: 14),
+                      SectionLabel(app.t(_op == Op.div ? 'divisor_label' : 'second_number')),
+                      Gap(children: [
+                        pinkPick(app.t('one_digit'), !_two, () => setState(() => _two = false)),
+                        pinkPick(app.t('two_digit'), _two, () => setState(() => _two = true)),
+                      ]),
+                    ],
+                    if (_op == Op.div) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                            color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: C.line, width: 2)),
+                        child: Row(children: [
+                          Expanded(child: Text(app.t('remainder_mode'), style: ts(15))),
+                          Switch(
+                            value: _rem,
+                            activeTrackColor: C.purple,
+                            onChanged: (v) => setState(() => _rem = v),
+                          ),
+                        ]),
                       ),
+                    ],
                     const SizedBox(height: 16),
                     CardBox(
                       child: Text(info, style: ts(15, color: C.inkSoft, weight: FontWeight.w700, height: 1.4)),
@@ -609,7 +748,7 @@ class _ColumnScreenState extends State<ColumnScreen> {
                 shadow: C.pinkD,
                 radius: 22,
                 depth: 7,
-                onTap: () => setState(() => _begin(Gen.column(_op, _digits, 5))),
+                onTap: () => setState(() => _begin(Gen.column(_op, _digits, 5, two: mulDiv && _two, rem: _op == Op.div && _rem))),
                 child: Text(app.t('start'), style: ts(24, color: Colors.white)),
               ),
             ],
@@ -645,7 +784,32 @@ class _ColumnScreenState extends State<ColumnScreen> {
     return (border: border, bg: bg, fg: fg, dashed: dashed);
   }
 
-  // ---------------- + − × board ----------------
+  /// An input box placed at an exact spot (used by the long × and ÷ boards).
+  Widget _box(String id, double left, double top, double w, double h, double font) {
+    final v = _vals[id] ?? '';
+    final sel = _sel == id;
+    final look = _look(id, v);
+    return Positioned(
+      left: left,
+      top: top,
+      width: w,
+      height: h,
+      child: GestureDetector(
+        onTap: () => setState(() => _sel = id),
+        child: Container(
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: look.dashed && !sel ? Colors.transparent : look.bg,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: look.border, width: sel || _checked ? 3 : 2),
+          ),
+          child: Text(v, textScaler: TextScaler.noScaling, style: tsBox(font, color: look.fg)),
+        ),
+      ),
+    );
+  }
+
+  // ---------------- + − and × by one digit ----------------
 
   Widget _board(AppState app) {
     final plan = _plan!;
@@ -703,7 +867,7 @@ class _ColumnScreenState extends State<ColumnScreen> {
           borderRadius: BorderRadius.circular(18),
         ),
         child: Column(children: [
-          SizedBox(height: 44, child: Center(child: i > 0 ? cellBox('c$i', small: true) : null)),
+          SizedBox(height: 44, child: Center(child: plan.expected.containsKey('c$i') ? cellBox('c$i', small: true) : null)),
           digit(t.a, i),
           digit(t.b, i),
           const SizedBox(height: 18),
@@ -722,7 +886,52 @@ class _ColumnScreenState extends State<ColumnScreen> {
     ]);
   }
 
-  // ---------------- long division board ----------------
+  // ---------------- × by two digits ----------------
+
+  Widget _lmBoard(AppState app) {
+    final plan = _lm!;
+    final t = plan.task;
+    final w = plan.width;
+    const cw = 54.0;
+    const rh = 58.0;
+    double x(int col) => (w - col) * cw; // column 0 is the rightmost; one free column on the left for the signs
+    double y(num row) => row * rh;
+    final items = <Widget>[];
+
+    Widget text(double left, num row, String s, {Color color = C.ink, double size = 38}) => Positioned(
+          left: left,
+          top: y(row),
+          width: cw,
+          height: rh,
+          child: Center(child: Text(s, textScaler: TextScaler.noScaling, style: tsBox(size, color: color))),
+        );
+    Widget line(num row) => Positioned(
+          left: x(w) + 4,
+          top: y(row) - 2,
+          width: (w + 1) * cw - 8,
+          height: 4,
+          child: Container(decoration: BoxDecoration(color: C.ink, borderRadius: BorderRadius.circular(2))),
+        );
+
+    for (var i = 0; i < _len(t.a); i++) {
+      items.add(text(x(i), 0, '${_dig(t.a, i)}'));
+    }
+    for (var i = 0; i < _len(t.b); i++) {
+      items.add(text(x(i), 1, '${_dig(t.b, i)}'));
+    }
+    items.add(text(x(w), 1, app.sign(Op.mul), color: C.pink));
+    items.add(line(2));
+    for (final id in plan.order) {
+      final row = id.startsWith('m0') ? 2 : (id.startsWith('m1') ? 3 : 4);
+      final col = int.parse(id.split('_')[1]);
+      items.add(_box(id, x(col) + 3, y(row) + 4, cw - 6, rh - 8, 30));
+    }
+    items.add(text(x(w), 3, '+', color: C.pink));
+    items.add(line(4));
+    return SizedBox(width: x(-1), height: y(5), child: Stack(clipBehavior: Clip.none, children: items));
+  }
+
+  // ---------------- ÷ (long division) ----------------
 
   /// Layouts (Settings › General): pl – result above the line over the dividend, ": d" beside it;
   /// en – divisor and bracket on the left, result above; de – "a : d = result" in one line;
@@ -732,15 +941,17 @@ class _ColumnScreenState extends State<ColumnScreen> {
     final layout = app.divLayout;
     final n = plan.digits.length;
     final qn = plan.steps.length;
+    final dv = '${plan.task.b}';
+    final dl = dv.length;
     const cw = 44.0;
     const rh = 46.0;
-    final left = layout == 'en' ? 3 : 1; // columns kept free on the left (minus signs, divisor)
+    final left = layout == 'en' ? dl + 2 : 1; // columns kept free on the left (minus signs, divisor)
     final top = layout == 'pl' || layout == 'en' ? 1 : 0; // row of the dividend
     final base = top + 1; // first row of the steps
     final rightCols = switch (layout) {
-      'pl' => n + 2,
-      'de' => n + 3 + qn,
-      'pot' => n + qn + 1,
+      'pl' => n + 1 + dl,
+      'de' => n + 2 + dl + qn,
+      'pot' => n + math.max(qn, dl) + 1,
       _ => n,
     };
     final rows = base + 2 * qn;
@@ -748,8 +959,8 @@ class _ColumnScreenState extends State<ColumnScreen> {
     double y(num row) => row * rh;
     final items = <Widget>[];
 
-    Widget text(num col, num row, String s, {Color color = C.ink, double size = 32}) => Positioned(
-          left: x(col),
+    Widget text(double l, num row, String s, {Color color = C.ink, double size = 32}) => Positioned(
+          left: l,
           top: y(row),
           width: cw,
           height: rh,
@@ -764,74 +975,48 @@ class _ColumnScreenState extends State<ColumnScreen> {
           child: Container(decoration: BoxDecoration(color: C.ink, borderRadius: BorderRadius.circular(2))),
         );
 
-    void field(String id, int endCol, num row) {
-      final len = plan.maxLen[id] ?? 1;
-      final v = _vals[id] ?? '';
-      final sel = _sel == id;
-      final look = _look(id, v);
+    /// A field: one box per digit, ending at column [endCol], filled from the left.
+    void field(String f, int endCol, num row, {double dx = 0}) {
+      final len = plan.fieldLen[f] ?? 1;
       final start = endCol - len + 1;
-      for (var c = start; c <= endCol; c++) {
-        final idx = v.length - (endCol - c) - 1;
-        final ch = idx >= 0 && idx < v.length ? v[idx] : '';
-        items.add(Positioned(
-          left: x(c) + 2,
-          top: y(row) + 3,
-          width: cw - 4,
-          height: rh - 6,
-          child: GestureDetector(
-            onTap: () => setState(() => _sel = id),
-            child: Container(
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: look.dashed && !sel ? Colors.transparent : look.bg,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: look.border, width: sel || _checked ? 3 : 2),
-              ),
-              child: Text(ch, textScaler: TextScaler.noScaling, style: tsBox(28, color: look.fg)),
-            ),
-          ),
-        ));
+      for (var j = 0; j < len; j++) {
+        items.add(_box('$f.$j', x(start + j) + 2 + dx, y(row) + 3, cw - 4, rh - 6, 26));
       }
     }
 
     // dividend
     for (var i = 0; i < n; i++) {
-      items.add(text(i, top, '${plan.digits[i]}'));
+      items.add(text(x(i), top, '${plan.digits[i]}'));
     }
-    final dv = '${plan.task.b}';
     final divSign = app.sign(Op.div);
     switch (layout) {
       case 'pl':
-        items.add(text(n, top, divSign, color: C.pink));
-        items.add(text(n + 1, top, dv));
+        items.add(text(x(n), top, divSign, color: C.pink));
+        for (var j = 0; j < dl; j++) {
+          items.add(text(x(n + 1 + j), top, dv[j]));
+        }
         items.add(hLine(0, n, top));
       case 'en':
-        items.add(text(-2, top, dv));
-        items.add(text(-1, top, ')', size: 40));
+        for (var j = 0; j < dl; j++) {
+          items.add(text(x(-1 - dl + j), top, dv[j]));
+        }
+        items.add(text(x(-1), top, ')', size: 40));
         items.add(hLine(0, n, top));
       case 'de':
-        items.add(text(n, top, divSign, color: C.pink));
-        items.add(text(n + 1, top, dv));
-        items.add(text(n + 2, top, '=', color: C.pink));
+        items.add(text(x(n), top, divSign, color: C.pink));
+        for (var j = 0; j < dl; j++) {
+          items.add(text(x(n + 1 + j), top, dv[j]));
+        }
+        items.add(text(x(n + 1 + dl), top, '=', color: C.pink));
       default: // pot
-        items.add(Positioned(
-          left: x(n) + 6,
-          top: y(top) + 4,
-          width: 3,
-          height: rh * 2 - 8,
-          child: Container(color: C.ink),
-        ));
-        items.add(Positioned(
-          left: x(n) + 12,
-          top: y(top),
-          width: cw,
-          height: rh,
-          child: Center(child: Text(dv, textScaler: TextScaler.noScaling, style: tsBox(32))),
-        ));
+        items.add(Positioned(left: x(n) + 6, top: y(top) + 4, width: 3, height: rh * 2 - 8, child: Container(color: C.ink)));
+        for (var j = 0; j < dl; j++) {
+          items.add(text(x(n + j) + 12, top, dv[j]));
+        }
         items.add(Positioned(
           left: x(n) + 6,
           top: y(top + 1) - 1.5,
-          width: qn * cw + 12,
+          width: math.max(qn, dl) * cw + 12,
           height: 3,
           child: Container(color: C.ink),
         ));
@@ -844,42 +1029,21 @@ class _ColumnScreenState extends State<ColumnScreen> {
         case 'pl' || 'en':
           field('q$k', s.pos, 0);
         case 'de':
-          field('q$k', n + 3 + k, top);
+          field('q$k', n + 2 + dl + k, top);
         default:
-          // under the divisor, a little to the right of the corner line
-          final v = _vals['q$k'] ?? '';
-          final look = _look('q$k', v);
-          final sel = _sel == 'q$k';
-          items.add(Positioned(
-            left: x(n + k) + 14,
-            top: y(top + 1) + 5,
-            width: cw - 4,
-            height: rh - 6,
-            child: GestureDetector(
-              onTap: () => setState(() => _sel = 'q$k'),
-              child: Container(
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: look.dashed && !sel ? Colors.transparent : look.bg,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: look.border, width: sel || _checked ? 3 : 2),
-                ),
-                child: Text(v, textScaler: TextScaler.noScaling, style: tsBox(28, color: look.fg)),
-              ),
-            ),
-          ));
+          field('q$k', n + k, top + 1, dx: 12);
       }
       final pRow = base + 2 * k;
       final rRow = pRow + 1;
-      final pLen = plan.maxLen['p$k'] ?? 1;
-      final curLen = '${s.cur}'.length;
-      items.add(text(s.pos - pLen, pRow, '−', color: C.pink, size: 28));
+      final pLen = plan.fieldLen['p$k'] ?? 1;
+      final curLen = _len(s.cur);
+      items.add(text(x(s.pos - pLen), pRow, '−', color: C.pink, size: 28));
       field('p$k', s.pos, pRow);
       items.add(hLine(s.pos - curLen + 1, s.pos + 1, rRow, thick: 2.5));
       field('r$k', s.pos, rRow);
       if (k + 1 < qn) {
         // the next digit, brought down
-        items.add(text(s.pos + 1, rRow, '${plan.digits[s.pos + 1]}', color: C.purple));
+        items.add(text(x(s.pos + 1), rRow, '${plan.digits[s.pos + 1]}', color: C.purple));
       }
     }
 
