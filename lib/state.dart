@@ -267,6 +267,8 @@ class AppState extends ChangeNotifier {
   String lang = 'pl';
   String mulSign = '×';
   String divSign = '÷';
+  /// How long division is written: pl (default), en, de or pot (FR, ES, UA).
+  String divLayout = 'pl';
   List<Profile> profiles = [];
   String? activeId;
   List<ModuleConfig> modules = [
@@ -326,6 +328,7 @@ class AppState extends ChangeNotifier {
         'lang': lang,
         'mul': mulSign,
         'div': divSign,
+        'dl': divLayout,
         'profiles': profiles.map((p) => p.toJson()).toList(),
         'active': activeId,
         'modules': modules.map((m) => m.toJson()).toList(),
@@ -347,6 +350,8 @@ class AppState extends ChangeNotifier {
     lang = langs.contains(j['lang']) ? '${j['lang']}' : 'en';
     mulSign = '${j['mul'] ?? '×'}';
     divSign = '${j['div'] ?? ':'}';
+    divLayout = '${j['dl'] ?? 'pl'}';
+    if (!divLayouts.contains(divLayout)) divLayout = 'pl';
     if (j['sv'] != 2) applyDefaultSigns(); // older test builds used other defaults
     profiles = list('profiles').map(Profile.fromJson).toList();
     activeId = j['active'] as String?;
@@ -378,6 +383,7 @@ class AppState extends ChangeNotifier {
     board = [];
     archives = [];
     tableGames = {};
+    divLayout = 'pl';
     notifyListeners();
   }
 
@@ -402,6 +408,13 @@ class AppState extends ChangeNotifier {
 
   void setDivSign(String s) {
     divSign = s;
+    _changed();
+  }
+
+  static const divLayouts = ['pl', 'en', 'de', 'pot'];
+
+  void setDivLayout(String l) {
+    divLayout = l;
     _changed();
   }
 

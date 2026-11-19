@@ -144,21 +144,40 @@ class Gen {
     return out;
   }
 
+  /// Tasks for written (column) arithmetic. [digits] = digits of the first number
+  /// (for ÷ the dividend); × and ÷ use a one-digit second number (2–9).
   static List<Task> column(Op op, int digits, int count) {
     final lo = pow(10, digits - 1).toInt();
     final hi = pow(10, digits).toInt() - 1;
     final picker = NoRepeat();
     Task make() {
-      if (op == Op.add) return Task(Op.add, rnd(lo, hi), rnd(lo, hi));
-      var a = rnd(lo, hi);
-      var b = rnd(lo, hi);
-      if (a == b) a = a < hi ? a + 1 : a - 1;
-      if (a < b) {
-        final x = a;
-        a = b;
-        b = x;
+      switch (op) {
+        case Op.add:
+          return Task(Op.add, rnd(lo, hi), rnd(lo, hi));
+        case Op.sub:
+          var a = rnd(lo, hi);
+          var b = rnd(lo, hi);
+          if (a == b) a = a < hi ? a + 1 : a - 1;
+          if (a < b) {
+            final x = a;
+            a = b;
+            b = x;
+          }
+          return Task(Op.sub, a, b);
+        case Op.mul:
+          return Task(Op.mul, rnd(lo, hi), rnd(2, 9));
+        case Op.div:
+          // Exact division whose result has no zero digits (no "0 steps" for beginners).
+          for (var i = 0; i < 500; i++) {
+            final d = rnd(2, 9);
+            final q = rnd((lo + d - 1) ~/ d, hi ~/ d);
+            if (q < 2 || '$q'.contains('0')) continue;
+            final a = q * d;
+            if (a < lo || a > hi) continue;
+            return Task(Op.div, a, d);
+          }
+          return digits == 2 ? const Task(Op.div, 84, 4) : (digits == 3 ? const Task(Op.div, 468, 3) : const Task(Op.div, 2448, 4));
       }
-      return Task(Op.sub, a, b);
     }
 
     return [for (var i = 0; i < count; i++) picker.pick(make)];

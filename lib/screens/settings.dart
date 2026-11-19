@@ -153,6 +153,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ]),
       ),
+      const SizedBox(height: 16),
+      SectionLabel(app.t('div_layout')),
+      for (final row in const [
+        ['pl', 'en'],
+        ['de', 'pot'],
+      ]) ...[
+        Gap(children: [
+          for (final l in row)
+            Pick(
+              label: l,
+              on: app.divLayout == l,
+              color: C.purple,
+              dark: C.purpleD,
+              height: 118,
+              onTap: () => app.setDivLayout(l),
+              child: _layoutChild(app, l, app.divLayout == l),
+            ),
+        ]),
+        const SizedBox(height: 4),
+      ],
+      Text(app.t('div_layout_info'), style: ts(13, color: C.inkSoft, weight: FontWeight.w700, height: 1.35)),
       const SizedBox(height: 22),
       SectionLabel(app.t('test_tools'), color: C.inkSoft),
       Text(app.t('test_tools_info'), style: ts(13, color: C.inkSoft, weight: FontWeight.w700)),
@@ -172,6 +193,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ]),
     ]);
+  }
+
+  /// A tiny sample of how 468 : 3 is written in the given layout.
+  Widget _layoutChild(AppState app, String l, bool on) {
+    final d = app.sign(Op.div);
+    final sample = switch (l) {
+      'pl' => ' 156\n ‾‾‾\n 468 $d 3',
+      'en' => '    156\n   ‾‾‾\n3 ) 468',
+      'de' => '468 $d 3 = 156',
+      _ => '468 │ 3  \n    ├────\n    │ 156',
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Text(sample,
+            textScaler: TextScaler.noScaling,
+            style: TextStyle(fontFamily: 'monospace', fontSize: 15, height: 1.15, fontWeight: FontWeight.w800, color: on ? Colors.white : C.ink)),
+        const SizedBox(height: 8),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(app.t('dl_$l'), style: ts(13, color: on ? Colors.white : C.inkSoft, weight: FontWeight.w800)),
+        ),
+      ]),
+    );
   }
 
   Widget _signChild(String s, String example, bool on) => Column(mainAxisAlignment: MainAxisAlignment.center, children: [
