@@ -53,11 +53,27 @@ jobs:
 
       - name: Build APK
         run: |
-          flutter build apk --release --split-per-abi
+          flutter build apk --release --split-per-abi --build-number=${{ github.run_number }}
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk tabmath-test.apk
-          flutter build apk --release
+          flutter build apk --release --build-number=${{ github.run_number }}
           cp build/app/outputs/flutter-apk/app-release.apk tabmath-test-uniwersalny.apk
           ls -la *.apk
+
+      - name: Build App Bundle (for Google Play; signed afterwards with the upload key)
+        run: |
+          flutter build appbundle --release --build-number=${{ github.run_number }}
+          cp build/app/outputs/bundle/release/app-release.aab tabmath-do-podpisu.aab
+          ls -la *.aab
+          echo "SDK versions in the bundle manifest:"
+          find build/app/intermediates -name AndroidManifest.xml -path '*release*' | head -20 | xargs grep -ho 'android:\(minSdkVersion\|targetSdkVersion\)="[0-9]*"' | sort -u || true
+          grep -rho 'targetSdk[^,]*' android/app/build.gradle.kts || true
+
+      - name: Store screenshots
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-roboto fonts-dejavu-core fonts-dejavu-extra > /dev/null
+          flutter test test/screenshots_test.dart || echo "::warning::Screenshot test failed"
+          if [ -d screenshots ]; then (cd screenshots && zip -qr ../tabmath-zrzuty-ekranu.zip .); ls -la screenshots/*; fi
 
       - uses: actions/upload-artifact@v4
         with:
@@ -65,6 +81,8 @@ jobs:
           path: |
             tabmath-test.apk
             tabmath-test-uniwersalny.apk
+            tabmath-do-podpisu.aab
+            tabmath-zrzuty-ekranu.zip
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -78,3 +96,5 @@ jobs:
           files: |
             tabmath-test.apk
             tabmath-test-uniwersalny.apk
+            tabmath-do-podpisu.aab
+            tabmath-zrzuty-ekranu.zip

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../billing.dart';
+import '../state.dart';
 import '../ui.dart';
 import 'parent_gate.dart';
 
@@ -154,27 +156,43 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 }
 
 /// "KUP / TESTUJ" screen. Also shown later when a locked module is tapped.
-class OfferScreen extends StatelessWidget {
+class OfferScreen extends StatefulWidget {
   final bool firstRun;
   const OfferScreen({super.key, this.firstRun = false});
+  @override
+  State<OfferScreen> createState() => _OfferScreenState();
+}
 
+class _OfferScreenState extends State<OfferScreen> {
+  bool get firstRun => widget.firstRun;
+
+  @override
+  void initState() {
+    super.initState();
+    billing.onMessage = (key) {
+      if (mounted) toast(context, AppScope.read(context).t(key));
+    };
+  }
+
+  @override
+  void dispose() {
+    billing.onMessage = null;
+    super.dispose();
+  }
+
+  /// Google Play purchase, behind the parent gate. The result comes back through billing.onMessage
+  /// and app.purchased; this screen then shows "unlocked" and the way to the menu.
   Future<void> _buy(BuildContext context) async {
     final app = AppScope.read(context);
-    final nav = Navigator.of(context);
     final ok = await ParentGate.ask(context);
     if (!ok || !context.mounted) return;
-    final confirm = await confirmDialog(
-      context,
-      app.t('buy_test_title'),
-      app.t('buy_test_text'),
-      app.t('buy_test_yes'),
-      app.t('cancel'),
-      danger: false,
-    );
-    if (!confirm) return;
-    app.purchase();
+    final started = await billing.buy();
+    if (!started && context.mounted) toast(context, app.t('buy_unavailable'));
+  }
+
+  void _toMenu(AppState app) {
     if (firstRun) app.completeOnboarding();
-    nav.popUntil((r) => r.isFirst);
+    Navigator.of(context).popUntil((r) => r.isFirst);
   }
 
   @override
@@ -243,12 +261,32 @@ class OfferScreen extends StatelessWidget {
                   depth: 7,
                   onTap: () => _buy(context),
                   child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    Text('${app.t('buy')} · ${app.t('price')}', style: ts(26, color: Colors.white, height: 1.1)),
+                    Text('${app.t('buy')} · ${billing.price ?? app.t('price')}', style: ts(26, color: Colors.white, height: 1.1)),
                     Text(app.t('buy_once'), style: ts(14, color: const Color(0xFFE2F7EA), weight: FontWeight.w800)),
                   ]),
                 ),
+              if (app.purchased) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(color: C.greenBg, borderRadius: BorderRadius.circular(20), border: Border.all(color: C.green, width: 2)),
+                  child: Row(children: [
+                    const Icon(Icons.verified_rounded, color: C.green, size: 30),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(app.t('unlocked'), style: ts(17, color: C.greenD))),
+                  ]),
+                ),
+                const SizedBox(height: 12),
+                Chunky(
+                  height: 62,
+                  color: C.green,
+                  shadow: C.greenD,
+                  radius: 22,
+                  onTap: () => _toMenu(app),
+                  child: Text(app.t('to_menu'), style: ts(20, color: Colors.white)),
+                ),
+              ],
               const SizedBox(height: 10),
-              if (!app.trialUsed)
+              if (!app.trialUsed && !app.purchased)
                 Chunky(
                   height: 66,
                   color: Colors.white,
@@ -274,7 +312,7 @@ class OfferScreen extends StatelessWidget {
                     textAlign: TextAlign.center,
                   ),
                 ),
-              if (firstRun && app.trialUsed)
+              if (firstRun && app.trialUsed && !app.purchased)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Chunky(
@@ -286,8 +324,12 @@ class OfferScreen extends StatelessWidget {
                     child: Text(app.t('to_menu'), style: ts(18)),
                   ),
                 ),
-              TextButton(
-                onPressed: () => toast(context, app.t('restore_test')),
+              if (!app.purchased)
+               TextButton(
+                onPressed: () async {
+                  final ok = await billing.restore();
+                  if (context.mounted) toast(context, app.t(ok ? 'restore_wait' : 'buy_unavailable'));
+                },
                 child: Text(app.t('restore'),
                     style: ts(15, color: C.blue, weight: FontWeight.w800).copyWith(decoration: TextDecoration.underline)),
               ),

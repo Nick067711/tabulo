@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:url_launcher/url_launcher.dart';
@@ -182,12 +184,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const Icon(Icons.info_outline_rounded, color: C.red),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(
-                app.trialActive
-                    ? app.t('version_trial').replaceAll('{h}', '${app.trialHoursLeft}')
-                    : app.t('version_basic'),
-                style: ts(14, color: C.red, weight: FontWeight.w800, height: 1.35),
-              ),
+              child: app.trialActive
+                  ? const TrialCountdown()
+                  : Text(app.t('version_basic'), style: ts(14, color: C.red, weight: FontWeight.w800, height: 1.35)),
             ),
           ]),
         ),
@@ -792,6 +791,45 @@ class _InfoTabState extends State<InfoTab> {
         child: Text('TabMath · ${app.t('version')} $appVersion',
             style: ts(13, color: C.inkSoft, weight: FontWeight.w800)),
       ),
+    ]);
+  }
+}
+
+
+/// "Trial: full version for 1 day. Time left: 23 h 41 min", refreshed every 20 seconds.
+class TrialCountdown extends StatefulWidget {
+  const TrialCountdown({super.key});
+  @override
+  State<TrialCountdown> createState() => _TrialCountdownState();
+}
+
+class _TrialCountdownState extends State<TrialCountdown> {
+  Timer? _t;
+
+  @override
+  void initState() {
+    super.initState();
+    _t = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _t?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final left = app.trialMsLeft;
+    final h = left ~/ 3600000;
+    final m = (left % 3600000) ~/ 60000;
+    final st = ts(14, color: C.red, weight: FontWeight.w800, height: 1.35);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(app.t('version_trial'), style: st),
+      Text('${app.t('time_left')}: $h h ${m.toString().padLeft(2, '0')} min', style: ts(18, color: C.red)),
     ]);
   }
 }

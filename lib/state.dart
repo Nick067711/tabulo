@@ -252,7 +252,7 @@ class TableGame {
 }
 
 /// Shown in Settings › i. Keep in step with the version in pubspec.yaml.
-const appVersion = '0.2.0';
+const appVersion = '1.0.0';
 
 class AppState extends ChangeNotifier {
   static const trialMs = 24 * 3600 * 1000;
@@ -480,6 +480,14 @@ class AppState extends ChangeNotifier {
 
   bool get locked => !purchased && !trialActive;
 
+  /// Milliseconds left in the free trial (0 when it is over or not started).
+  int get trialMsLeft {
+    final s = trialStart;
+    if (s == null) return 0;
+    final left = trialMs - (now - s);
+    return left < 0 ? 0 : left;
+  }
+
   int get trialHoursLeft {
     final s = trialStart;
     if (s == null) return 0;
@@ -493,18 +501,10 @@ class AppState extends ChangeNotifier {
     _changed();
   }
 
+  /// Called by the Google Play purchase flow (lib/billing.dart).
   void purchase() {
+    if (purchased) return;
     purchased = true;
-    _changed();
-  }
-
-  void endTrialNow() {
-    trialStart = now - trialMs - 1000;
-    _changed();
-  }
-
-  void undoPurchase() {
-    purchased = false;
     _changed();
   }
 
