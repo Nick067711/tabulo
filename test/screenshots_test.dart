@@ -180,5 +180,9 @@ void main() {
           await t.pump(const Duration(milliseconds: 100));
         }));
     testWidgets('$lang 7 leaderboard', (t) => shot(t, '7_leaderboard', () => const LeaderboardScreen(), null));
+    testWidgets('$lang 8 users', (t) => shot(t, '8_users_stars', () => const SettingsScreen(), (t) async {
+          final app = AppScope.read(t.element(find.byType(SettingsScreen)));
+          await t.tap(find.text(app.t('tab_users')));
+        }));
   }
 }
