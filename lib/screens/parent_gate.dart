@@ -54,7 +54,7 @@ class _ParentGateState extends State<ParentGate> {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    final words = numberWords(_target, app.lang == 'pl' ? 'pl' : 'en');
+    final words = numberWords(_target, app.lang);
     return Scaffold(
       backgroundColor: C.ink,
       body: SafeArea(

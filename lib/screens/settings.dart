@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'package:url_launcher/url_launcher.dart';
+
 import '../state.dart';
 import '../ui.dart';
+import 'home.dart';
 import 'leaderboard.dart';
 import 'onboarding.dart';
 import 'quiz.dart';
@@ -26,7 +29,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    final tabs = [app.t('tab_general'), app.t('tab_users'), app.t('tab_exercises'), app.t('quiz')];
+    final tabs = [app.t('tab_general'), app.t('tab_users'), app.t('tab_exercises'), app.t('quiz'), 'i'];
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -37,8 +40,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               actions: [
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: C.sand, borderRadius: BorderRadius.circular(10)),
-                  child: Text(app.t('for_parent'), style: ts(12, color: C.inkSoft, weight: FontWeight.w800)),
+                  decoration: BoxDecoration(
+                    color: C.red,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: C.red, width: 2),
+                  ),
+                  child: Text(app.t('for_parent'), style: ts(12, color: Colors.white, weight: FontWeight.w800)),
                 ),
               ],
             ),
@@ -49,7 +56,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Row(children: [
                 for (var i = 0; i < tabs.length; i++)
                   Expanded(
-                    flex: i == 1 ? 13 : (i == 2 ? 12 : (i == 3 ? 8 : 10)),
+                    flex: const [10, 13, 12, 8, 4][i],
                     child: GestureDetector(
                       onTap: () => setState(() => _tab = i),
                       child: Container(
@@ -64,7 +71,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           fit: BoxFit.scaleDown,
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 4),
-                            child: Text(tabs[i], style: ts(14, color: _tab == i ? C.ink : C.inkSoft)),
+                            child: i == 4
+                                ? Icon(Icons.info_outline_rounded, size: 22, color: _tab == i ? C.blue : C.inkSoft)
+                                : Text(tabs[i], style: ts(14, color: _tab == i ? C.ink : C.inkSoft)),
                           ),
                         ),
                       ),
@@ -80,7 +89,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   0 => _general(app),
                   1 => _users(app),
                   2 => _modules(app),
-                  _ => _quiz(app),
+                  3 => _quiz(app),
+                  _ => const InfoTab(),
                 },
               ),
             ),
@@ -102,11 +112,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ]),
         const SizedBox(height: 4),
       ],
-      if (app.lang != 'pl' && app.lang != 'en')
-        Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(app.t('lang_partial'), style: ts(13, color: C.inkSoft, weight: FontWeight.w700)),
-        ),
       const SizedBox(height: 16),
       SectionLabel(app.t('mul_sign')),
       Gap(children: [
@@ -196,6 +201,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       style: ts(13, color: C.inkSoft, weight: FontWeight.w700)),
                 ]),
               ),
+              IconButton(
+                icon: const Icon(Icons.edit_rounded, color: C.blue),
+                tooltip: app.t('rename'),
+                onPressed: () => _rename(app, p),
+              ),
               if (app.profiles.length > 1)
                 IconButton(
                   icon: const Icon(Icons.delete_outline_rounded, color: C.red),
@@ -257,6 +267,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ]);
   }
 
+  Future<void> _rename(AppState app, Profile p) async {
+    final ctl = TextEditingController(text: p.name);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title: Text(app.t('rename_title'), style: ts(20)),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          TextField(
+            controller: ctl,
+            autofocus: true,
+            maxLength: 16,
+            textCapitalization: TextCapitalization.words,
+            style: ts(18, weight: FontWeight.w800),
+            decoration: InputDecoration(
+              counterText: '',
+              hintText: app.t('name_hint'),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: C.blue, width: 3)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: C.line, width: 2)),
+            ),
+            onSubmitted: (v) => Navigator.of(ctx).pop(v),
+          ),
+          const SizedBox(height: 10),
+          Text(app.t('rename_info'), style: ts(13, color: C.inkSoft, weight: FontWeight.w700, height: 1.35)),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(app.t('cancel'))),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: C.blue),
+            onPressed: () => Navigator.of(ctx).pop(ctl.text),
+            child: Text(app.t('save')),
+          ),
+        ],
+      ),
+    );
+    ctl.dispose();
+    if (name != null && name.trim().isNotEmpty) app.renameProfile(p.id, name);
+  }
+
   // ---------------- Modules ----------------
 
   Widget _modules(AppState app) {
@@ -280,10 +329,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       Text(app.opName(_mod), style: ts(21)),
       const SizedBox(height: 12),
       SectionLabel(app.t('tasks_in_exercise')),
-      Gap(gap: 8, children: [
-        for (final n in [10, 20, 30, 50])
-          Pick(label: '$n', on: m.count == n, height: 48, onTap: () => app.updateModule(_mod, (x) => x.count = n)),
-      ]),
+      CountSlider(
+        value: m.count,
+        color: C.op(_mod),
+        onChanged: (n) => app.updateModule(_mod, (x) => x.count = n),
+      ),
       const SizedBox(height: 16),
       if (isMulDiv) ...[
         SectionLabel(app.t('which_numbers')),
@@ -308,8 +358,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
         const SizedBox(height: 6),
         Gap(gap: 8, children: [
-          OutlinedButton(onPressed: () => app.updateModule(_mod, (x) => x.numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), child: Text(app.t('all_1_10'))),
-          OutlinedButton(onPressed: () => app.updateModule(_mod, (x) => x.numbers = [2, 3, 4, 5, 6, 7, 8, 9]), child: Text(app.t('no_1_10'))),
+          OutlinedButton(
+            onPressed: () => app.updateModule(_mod, (x) => x.numbers = [for (var n = 1; n <= 12; n++) n]),
+            child: Text(app.t('nums_all')),
+          ),
+          OutlinedButton(
+            onPressed: () => app.updateModule(_mod, (x) => x.numbers = [2, 3, 4, 5, 6, 7, 8, 9]),
+            child: Text(app.t('nums_2_9')),
+          ),
         ]),
         const SizedBox(height: 6),
         Text(app.t('uk_us_note'), style: ts(13, color: C.inkSoft, weight: FontWeight.w700)),
@@ -401,6 +457,197 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(width: 8),
           Text(app.t('archive_tables'), style: ts(16)),
         ]),
+      ),
+    ]);
+  }
+}
+
+
+/// Number of tasks, 10 to 100: a number line with a point that jumps every 10.
+class CountSlider extends StatelessWidget {
+  final int value;
+  final Color color;
+  final ValueChanged<int> onChanged;
+  const CountSlider({super.key, required this.value, required this.color, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final v = value.clamp(10, 100);
+    final snapped = ((v / 10).round() * 10).clamp(10, 100);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(6, 10, 6, 8),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: C.line, width: 2)),
+      child: Column(children: [
+        Text('$snapped', style: ts(30, color: color, height: 1.1)),
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            activeTrackColor: color,
+            inactiveTrackColor: C.sand,
+            thumbColor: color,
+            overlayColor: color.withValues(alpha: 0.15),
+            activeTickMarkColor: Colors.white,
+            inactiveTickMarkColor: C.inkSoft,
+            trackHeight: 8,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 14),
+          ),
+          child: Slider(
+            value: snapped.toDouble(),
+            min: 10,
+            max: 100,
+            divisions: 9,
+            onChanged: (d) {
+              final n = d.round();
+              if (n != snapped) onChanged(n);
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            for (var n = 10; n <= 100; n += 10)
+              SizedBox(
+                width: 22,
+                child: Text('$n',
+                    textAlign: TextAlign.center,
+                    textScaler: TextScaler.noScaling,
+                    style: ts(10, color: n == snapped ? color : C.inkSoft, weight: FontWeight.w800)),
+              ),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
+
+// ---------------- Info ("i") ----------------
+
+const privacyUrl = 'https://sites.google.com/view/tabmath';
+const contactEmail = 'tabmath.app@gmail.com';
+
+class InfoTab extends StatefulWidget {
+  const InfoTab({super.key});
+  @override
+  State<InfoTab> createState() => _InfoTabState();
+}
+
+class _InfoTabState extends State<InfoTab> {
+  bool _policy = false;
+
+  Future<void> _open(String url) async {
+    try {
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (_) {}
+  }
+
+  Widget _p(String text, {Color color = C.inkSoft}) => Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Text(text, style: ts(14, color: color, weight: FontWeight.w700, height: 1.4)),
+      );
+
+  Widget _link(String label, String url, IconData icon) => Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () => _open(url),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(children: [
+              Icon(icon, size: 20, color: C.blue),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(label,
+                    style: ts(15, color: C.blue, weight: FontWeight.w800).copyWith(decoration: TextDecoration.underline, decorationColor: C.blue)),
+              ),
+            ]),
+          ),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const StarsRules(),
+      const SizedBox(height: 14),
+      CardBox(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Icon(Icons.favorite_rounded, color: C.pink, size: 22),
+            const SizedBox(width: 8),
+            Expanded(child: Text(app.t('thanks_title'), style: ts(17))),
+          ]),
+          _p(app.t('thanks_text')),
+          _link(contactEmail, 'mailto:$contactEmail', Icons.mail_outline_rounded),
+        ]),
+      ),
+      const SizedBox(height: 14),
+      CardBox(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Icon(Icons.rocket_launch_rounded, color: C.purple, size: 22),
+            const SizedBox(width: 8),
+            Expanded(child: Text(app.t('next_app_title'), style: ts(17))),
+          ]),
+          _p(app.t('next_app_text')),
+          for (final k in ['next_app_1', 'next_app_2', 'next_app_3', 'next_app_4'])
+            Padding(
+              padding: const EdgeInsets.only(top: 6, left: 4),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('•  ', style: ts(15, color: C.purple)),
+                Expanded(child: Text(app.t(k), style: ts(14, weight: FontWeight.w800, height: 1.35))),
+              ]),
+            ),
+        ]),
+      ),
+      const SizedBox(height: 14),
+      if (!_policy)
+        Chunky(
+          height: 56,
+          radius: 16,
+          depth: 4,
+          border: C.line,
+          onTap: () => setState(() => _policy = true),
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            const Icon(Icons.privacy_tip_outlined, color: C.ink),
+            const SizedBox(width: 8),
+            Text(app.t('privacy_title'), style: ts(16)),
+            const SizedBox(width: 4),
+            const Icon(Icons.expand_more_rounded, color: C.ink),
+          ]),
+        )
+      else
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 16),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: C.line, width: 2)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              const Icon(Icons.privacy_tip_outlined, color: C.ink),
+              const SizedBox(width: 8),
+              Expanded(child: Text(app.t('privacy_title'), style: ts(17))),
+              IconButton(
+                icon: const Icon(Icons.close_rounded, color: C.ink),
+                tooltip: app.t('close'),
+                onPressed: () => setState(() => _policy = false),
+              ),
+            ]),
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                _p(app.t('pp_lead'), color: C.ink),
+                for (final k in ['pp_1', 'pp_2', 'pp_3', 'pp_4', 'pp_5', 'pp_6']) _p(app.t(k)),
+                const SizedBox(height: 10),
+                Text(app.t('pp_admin'), style: ts(14)),
+                _p('Mikołaj Piwecki\nLeszczynowa 1, 62-069 Dąbrówka, ${app.t('country_pl')}\n${app.t('phone')}: +48 727 597 336\nE-mail: $contactEmail'),
+                const SizedBox(height: 4),
+                _link(app.t('pp_full'), privacyUrl, Icons.open_in_new_rounded),
+              ]),
+            ),
+          ]),
+        ),
+      const SizedBox(height: 14),
+      Center(
+        child: Text('TabMath · ${app.t('version')} $appVersion',
+            style: ts(13, color: C.inkSoft, weight: FontWeight.w800)),
       ),
     ]);
   }

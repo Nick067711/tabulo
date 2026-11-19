@@ -131,7 +131,7 @@ int starsFor(int correct, int total) {
 class LbEntry {
   final String id;
   final String profileId;
-  final String name;
+  String name; // follows the profile when it is renamed
   final int group;
   final int correct;
   final int total;
@@ -251,6 +251,9 @@ class TableGame {
       );
 }
 
+/// Shown in Settings › i. Keep in step with the version in pubspec.yaml.
+const appVersion = '0.2.0';
+
 class AppState extends ChangeNotifier {
   static const trialMs = 24 * 3600 * 1000;
   static const ranges = [10, 20, 100, 1000];
@@ -291,7 +294,7 @@ class AppState extends ChangeNotifier {
   Future<void> load() async {
     try {
       _prefs = await SharedPreferences.getInstance();
-      final raw = _prefs!.getString('tabulo_v1');
+      final raw = _prefs!.getString('tabmath_v1');
       if (raw == null) {
         final sys = WidgetsBinding.instance.platformDispatcher.locale.languageCode;
         lang = langs.contains(sys) ? sys : 'en';
@@ -300,7 +303,7 @@ class AppState extends ChangeNotifier {
       }
       _fromJson(Map<String, dynamic>.from(jsonDecode(raw) as Map));
     } catch (e) {
-      debugPrint('Tabulo: load failed: $e');
+      debugPrint('TabMath: load failed: $e');
     }
   }
 
@@ -312,9 +315,9 @@ class AppState extends ChangeNotifier {
   Future<void> _save() async {
     try {
       _prefs ??= await SharedPreferences.getInstance();
-      await _prefs!.setString('tabulo_v1', jsonEncode(_toJson()));
+      await _prefs!.setString('tabmath_v1', jsonEncode(_toJson()));
     } catch (e) {
-      debugPrint('Tabulo: save failed: $e');
+      debugPrint('TabMath: save failed: $e');
     }
   }
 
@@ -362,7 +365,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> resetAll() async {
     _prefs ??= await SharedPreferences.getInstance();
-    await _prefs!.remove('tabulo_v1');
+    await _prefs!.remove('tabmath_v1');
     onboarded = false;
     profiles = [];
     activeId = null;
@@ -510,6 +513,24 @@ class AppState extends ChangeNotifier {
     board.removeWhere((e) => e.profileId == id);
     tableGames.remove(id);
     if (activeId == id) activeId = profiles.isEmpty ? null : profiles.first.id;
+    _changed();
+  }
+
+  /// New name for a profile; quiz leaderboards and their archive show the new name too.
+  void renameProfile(String id, String name) {
+    final n = name.trim();
+    if (n.isEmpty) return;
+    for (final p in profiles) {
+      if (p.id == id) p.name = n;
+    }
+    for (final e in board) {
+      if (e.profileId == id) e.name = n;
+    }
+    for (final a in archives) {
+      for (final e in a.entries) {
+        if (e.profileId == id) e.name = n;
+      }
+    }
     _changed();
   }
 

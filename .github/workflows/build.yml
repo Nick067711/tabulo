@@ -28,13 +28,16 @@ jobs:
         run: |
           flutter --version
           if [ ! -d android ]; then
-            flutter create --org pl.tabulo --project-name tabulo --platforms android /tmp/gen
+            flutter create --org pl.tabmath --project-name tabmath --platforms android /tmp/gen
             cp -r /tmp/gen/android ./android
           fi
           for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
             cp branding/mipmap-$d/ic_launcher.png android/app/src/main/res/mipmap-$d/ic_launcher.png
           done
-          sed -i 's/android:label="tabulo"/android:label="Tabulo"/' android/app/src/main/AndroidManifest.xml
+          sed -i 's/android:label="tabmath"/android:label="TabMath"/' android/app/src/main/AndroidManifest.xml
+          # Package name in Google Play (cannot be changed after the first upload).
+          sed -i 's/applicationId = "[^"]*"/applicationId = "pl.tabmath.app"/' android/app/build.gradle.kts
+          grep -n 'applicationId\|android:label' android/app/build.gradle.kts android/app/src/main/AndroidManifest.xml
 
       - name: Use the fixed test signing key
         run: |
@@ -51,27 +54,27 @@ jobs:
       - name: Build APK
         run: |
           flutter build apk --release --split-per-abi
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk tabulo-test.apk
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk tabmath-test.apk
           flutter build apk --release
-          cp build/app/outputs/flutter-apk/app-release.apk tabulo-test-uniwersalny.apk
+          cp build/app/outputs/flutter-apk/app-release.apk tabmath-test-uniwersalny.apk
           ls -la *.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: tabulo-apk
+          name: tabmath-apk
           path: |
-            tabulo-test.apk
-            tabulo-test-uniwersalny.apk
+            tabmath-test.apk
+            tabmath-test-uniwersalny.apk
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: Tabulo – wersja testowa ${{ github.run_number }}
+          name: TabMath – wersja testowa ${{ github.run_number }}
           body: |
-            Testowa wersja Tabulo do zainstalowania na telefonie z Androidem.
-            Pobierz plik tabulo-test.apk (pasuje do prawie wszystkich telefonów) i otwórz go, aby zainstalować.
-            Jeśli telefon zgłosi, że aplikacja nie jest zgodna, pobierz tabulo-test-uniwersalny.apk.
+            Testowa wersja TabMath do zainstalowania na telefonie z Androidem.
+            Pobierz plik tabmath-test.apk (pasuje do prawie wszystkich telefonów) i otwórz go, aby zainstalować.
+            Jeśli telefon zgłosi, że aplikacja nie jest zgodna, pobierz tabmath-test-uniwersalny.apk.
           files: |
-            tabulo-test.apk
-            tabulo-test-uniwersalny.apk
+            tabmath-test.apk
+            tabmath-test-uniwersalny.apk

@@ -17,6 +17,10 @@ int _pow10(int i) {
 
 int _dig(int x, int i) => (x ~/ _pow10(i)) % 10;
 
+/// Values of the small boxes above the columns: +1 carried when adding, −1 borrowed when subtracting.
+const markPlus = '+1';
+const markMinus = '−1';
+
 /// Expected values for one written (column) operation.
 class ColumnPlan {
   final Task task;
@@ -31,7 +35,7 @@ class ColumnPlan {
     final exp = <String, String>{};
     var carry = 0;
     for (var i = 0; i < w; i++) {
-      if (i > 0) exp['c$i'] = carry == 1 ? '1' : '';
+      if (i > 0) exp['c$i'] = carry == 1 ? (t.op == Op.add ? markPlus : markMinus) : '';
       final da = _dig(t.a, i), db = _dig(t.b, i);
       if (t.op == Op.add) {
         carry = da + db + carry >= 10 ? 1 : 0;
@@ -74,6 +78,7 @@ class _ColumnScreenState extends State<ColumnScreen> {
   bool _checked = false;
   bool _failedThis = false;
   bool _solved = false;
+  int _nextIn = 0; // seconds left before the next task opens by itself
   final List<Mistake> _mistakes = [];
   int _good = 0;
   int _start = 0;
@@ -110,19 +115,57 @@ class _ColumnScreenState extends State<ColumnScreen> {
     _solved = false;
   }
 
+  bool get _onMark => (_sel ?? '').startsWith('c');
+
+  /// Digit from the keypad. Works only in the result boxes; the small boxes above
+  /// take only +1 / −1 from their own buttons.
   void _type(String d) {
     final s = _sel;
-    if (s == null || _solved) return;
+    if (s == null || _solved || s.startsWith('c')) return;
     setState(() {
       _vals[s] = d;
       _checked = false;
-      final i = _plan.order.indexOf(s);
-      if (i >= 0 && i + 1 < _plan.order.length) _sel = _plan.order[i + 1];
+      final col = int.tryParse(s.substring(1)) ?? 0;
+      if (col + 1 >= _plan.width) return;
+      final noMark = (_plan.expected['c${col + 1}'] ?? '').isEmpty;
+      // Nothing to carry or borrow and the digit is right: go straight to the next result box.
+      _sel = noMark && _plan.isRight(s, d) ? 'r${col + 1}' : 'c${col + 1}';
     });
   }
 
+  /// +1 / −1 (or empty) in the selected small box, then on to the result box below-left.
+  void _mark(String v) {
+    final s = _sel;
+    if (s == null || _solved || !s.startsWith('c')) return;
+    setState(() {
+      if (v.isEmpty || _vals[s] == v) {
+        _vals.remove(s);
+      } else {
+        _vals[s] = v;
+      }
+      _checked = false;
+      if (v.isNotEmpty) _sel = 'r${s.substring(1)}';
+    });
+  }
+
+  void _next() {
+    _timer?.cancel();
+    if (!mounted) return;
+    if (_idx + 1 >= _tasks.length) {
+      _finish();
+    } else {
+      setState(() {
+        _idx++;
+        _load();
+      });
+    }
+  }
+
   void _check() {
-    if (_solved) return;
+    if (_solved) {
+      _next();
+      return;
+    }
     var all = true;
     for (final k in _plan.expected.keys) {
       if (!_plan.isRight(k, _vals[k] ?? '')) all = false;
@@ -140,15 +183,19 @@ class _ColumnScreenState extends State<ColumnScreen> {
       }
     });
     if (all) {
-      _timer = Timer(const Duration(milliseconds: 1100), () {
-        if (!mounted) return;
-        if (_idx + 1 >= _tasks.length) {
-          _finish();
+      // Wait for "Next"; after 5 seconds the next task opens by itself.
+      _nextIn = 5;
+      _timer?.cancel();
+      _timer = Timer.periodic(const Duration(seconds: 1), (tm) {
+        if (!mounted) {
+          tm.cancel();
+          return;
+        }
+        if (_nextIn <= 1) {
+          tm.cancel();
+          _next();
         } else {
-          setState(() {
-            _idx++;
-            _load();
-          });
+          setState(() => _nextIn--);
         }
       });
     }
@@ -181,6 +228,9 @@ class _ColumnScreenState extends State<ColumnScreen> {
 
   String _hint(AppState app) {
     final sel = _sel ?? 'r0';
+    if (sel.startsWith('c')) {
+      return app.t(_plan.task.op == Op.add ? 'hint_mark_add' : 'hint_mark_sub');
+    }
     final col = int.tryParse(sel.substring(1)) ?? 0;
     final t = _plan.task;
     final da = _dig(t.a, col), db = _dig(t.b, col);
@@ -225,6 +275,8 @@ class _ColumnScreenState extends State<ColumnScreen> {
                 ]),
               ),
               const SizedBox(height: 10),
+              _markBar(app),
+              const SizedBox(height: 6),
               Expanded(child: Center(child: FittedBox(fit: BoxFit.scaleDown, child: _board(app)))),
               const SizedBox(height: 8),
               Keypad(
@@ -233,7 +285,7 @@ class _ColumnScreenState extends State<ColumnScreen> {
                 onDigit: _type,
                 onDelete: () {
                   final s = _sel;
-                  if (s == null || _solved) return;
+                  if (s == null || _solved || s.startsWith('c')) return;
                   setState(() {
                     _vals.remove(s);
                     _checked = false;
@@ -255,18 +307,66 @@ class _ColumnScreenState extends State<ColumnScreen> {
                 radius: 20,
                 depth: 6,
                 onTap: _check,
-                child: Text(
-                  _solved
-                      ? '✓ ${app.t('bravo')} ${app.fullText(_plan.task)}'
-                      : (_checked ? '✗ ${app.t('fix_red')}' : 'OK'),
-                  style: ts(20, color: Colors.white),
-                ),
+                child: _solved
+                    ? Column(mainAxisSize: MainAxisSize.min, children: [
+                        Text('✓ ${app.t('bravo')} ${app.fullText(_plan.task)}',
+                            style: ts(16, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text('${app.t('next')}  ›  ($_nextIn)', style: ts(20, color: Colors.white)),
+                      ])
+                    : Text(_checked ? '✗ ${app.t('fix_red')}' : 'OK', style: ts(20, color: Colors.white)),
               ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  /// Buttons for the small boxes above the columns. Active only when such a box is selected.
+  Widget _markBar(AppState app) {
+    final on = _onMark && !_solved;
+    Widget btn(String v, String label, Color c, Color d) => Expanded(
+          child: Opacity(
+            opacity: on ? 1 : 0.35,
+            child: Chunky(
+              height: 46,
+              color: c,
+              shadow: d,
+              radius: 14,
+              depth: 4,
+              onTap: on ? () => _mark(v) : null,
+              child: Text(label, textScaler: TextScaler.noScaling, style: tsBox(22, color: Colors.white)),
+            ),
+          ),
+        );
+    return Row(children: [
+      Expanded(
+        flex: 2,
+        child: Text(app.t(on ? 'mark_pick' : 'mark_info'),
+            style: ts(13, color: C.inkSoft, weight: FontWeight.w700, height: 1.25)),
+      ),
+      const SizedBox(width: 8),
+      // Same colour for both, so the colour does not give the answer away.
+      btn(markPlus, markPlus, C.purple, C.purpleD),
+      const SizedBox(width: 8),
+      btn(markMinus, markMinus, C.purple, C.purpleD),
+      const SizedBox(width: 8),
+      SizedBox(
+        width: 52,
+        child: Opacity(
+          opacity: on ? 1 : 0.35,
+          child: Chunky(
+            height: 46,
+            color: Colors.white,
+            shadow: C.line,
+            radius: 14,
+            depth: 4,
+            onTap: on ? () => _mark('') : null,
+            child: const Icon(Icons.backspace_outlined, color: C.ink, size: 22),
+          ),
+        ),
+      ),
+    ]);
   }
 
   Widget _setup(AppState app) {
@@ -342,12 +442,12 @@ class _ColumnScreenState extends State<ColumnScreen> {
         bg = const Color(0xFFFFF0F5);
         fg = C.pink;
       }
-      final size = small ? 38.0 : 56.0;
+      final size = small ? 46.0 : 56.0;
       return GestureDetector(
         onTap: () => setState(() => _sel = id),
         child: Container(
           width: size,
-          height: small ? 38 : 64,
+          height: small ? 40 : 64,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: dashed && !sel ? Colors.transparent : bg,

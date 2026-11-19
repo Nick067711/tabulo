@@ -11,19 +11,19 @@ Future<void> main() async {
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   final app = AppState();
   await app.load();
-  runApp(TabuloApp(app: app));
+  runApp(TabMathApp(app: app));
 }
 
-class TabuloApp extends StatelessWidget {
+class TabMathApp extends StatelessWidget {
   final AppState app;
-  const TabuloApp({super.key, required this.app});
+  const TabMathApp({super.key, required this.app});
 
   @override
   Widget build(BuildContext context) {
     return AppScope(
       notifier: app,
       child: MaterialApp(
-        title: 'Tabulo',
+        title: 'TabMath',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           useMaterial3: true,

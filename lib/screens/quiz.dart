@@ -18,6 +18,7 @@ class _QuizScreenState extends State<QuizScreen> {
   int _count = 3;
   int _idx = 0;
   Task? _q;
+  NoRepeat _picker = NoRepeat();
   String _val = '';
   int _good = 0;
   int _bad = 0;
@@ -69,7 +70,8 @@ class _QuizScreenState extends State<QuizScreen> {
         _mistakes.clear();
         _val = '';
         _flash = null;
-        _q = Gen.quiz(_group, null);
+        _picker = NoRepeat();
+        _q = Gen.quiz(_group, _picker);
         _startAt = DateTime.now().millisecondsSinceEpoch;
         _endAt = 0;
       });
@@ -104,7 +106,7 @@ class _QuizScreenState extends State<QuizScreen> {
         if (!mounted) return;
         setState(() {
           _idx++;
-          _q = Gen.quiz(_group, _q);
+          _q = Gen.quiz(_group, _picker);
           _val = '';
           _flash = null;
         });

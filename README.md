@@ -1,14 +1,14 @@
-# Tabulo
+# TabMath
 
 Tabliczka mnożenia i podstawowe działania dla dzieci (6–10 lat). Wersja testowa.
 
-Każde wgranie zmian do gałęzi `main` automatycznie buduje plik `tabulo-test.apk`
+Każde wgranie zmian do gałęzi `main` automatycznie buduje plik `tabmath-test.apk`
 (zakładka **Actions**) i publikuje go w zakładce **Releases**.
 
 ## Instalacja na telefonie
 
 1. Na telefonie otwórz stronę repozytorium → **Releases** → najnowsza wersja.
-2. Pobierz `tabulo-test.apk` i otwórz pobrany plik.
+2. Pobierz `tabmath-test.apk` i otwórz pobrany plik.
 3. Android zapyta o zgodę na instalację z tego źródła – zezwól (tylko dla przeglądarki lub menedżera plików).
 
 ## Struktura

@@ -36,47 +36,10 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
   }
 
-  Widget _starsCard(AppState app) {
-    Widget row(int n, String text) => Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Row(children: [
-            SizedBox(
-              width: 66,
-              child: n > 0
-                  ? Row(children: [for (var i = 0; i < n; i++) const Icon(Icons.star_rounded, color: Color(0xFFE8A400), size: 21)])
-                  : Text('+3', style: ts(17, color: const Color(0xFFB07800))),
-            ),
-            Expanded(child: Text(text, style: ts(14, weight: FontWeight.w800, height: 1.3))),
-          ]),
-        );
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(16, 12, 8, 14),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFF7DD),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: C.yellow, width: 2),
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Expanded(child: Text(app.t('stars_title'), style: ts(17))),
-            IconButton(
-              icon: const Icon(Icons.close_rounded, color: C.ink),
-              tooltip: app.t('close'),
-              onPressed: () => setState(() => _starsInfo = false),
-            ),
-          ]),
-          Text(app.t('stars_intro'), style: ts(14, color: C.inkSoft, weight: FontWeight.w700, height: 1.35)),
-          row(3, app.t('stars_3')),
-          row(2, app.t('stars_2')),
-          row(1, app.t('stars_1')),
-          row(0, app.t('stars_record')),
-        ]),
-      ),
-    );
-  }
+  Widget _starsCard(AppState app) => Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: StarsRules(onClose: () => setState(() => _starsInfo = false)),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -233,7 +196,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(app.t('table_title'), style: ts(25, height: 1.05)),
                       const SizedBox(height: 6),
-                      Text(app.t('table_sub'), style: ts(15, color: const Color(0xFF4A3A00), weight: FontWeight.w700)),
+                      Text(app.t('table_sub'),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: ts(15, color: const Color(0xFF4A3A00), weight: FontWeight.w700, height: 1.2)),
                     ]),
                   ),
                   Text(app.sign(Op.mul), style: ts(64, height: 1)),
@@ -314,6 +280,55 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+
+/// How stars are earned. Shown after tapping the stars under the name and in Settings › i.
+class StarsRules extends StatelessWidget {
+  final VoidCallback? onClose;
+  const StarsRules({super.key, this.onClose});
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    Widget row(int n, String text) => Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Row(children: [
+            SizedBox(
+              width: 66,
+              child: n > 0
+                  ? Row(children: [for (var i = 0; i < n; i++) const Icon(Icons.star_rounded, color: Color(0xFFE8A400), size: 21)])
+                  : Text('+3', style: ts(17, color: const Color(0xFFB07800))),
+            ),
+            Expanded(child: Text(text, style: ts(14, weight: FontWeight.w800, height: 1.3))),
+          ]),
+        );
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(16, onClose == null ? 14 : 12, 8, 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7DD),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: C.yellow, width: 2),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text(app.t('stars_title'), style: ts(17))),
+          if (onClose != null)
+            IconButton(
+              icon: const Icon(Icons.close_rounded, color: C.ink),
+              tooltip: app.t('close'),
+              onPressed: onClose,
+            ),
+        ]),
+        Text(app.t('stars_intro'), style: ts(14, color: C.inkSoft, weight: FontWeight.w700, height: 1.35)),
+        row(3, app.t('stars_3')),
+        row(2, app.t('stars_2')),
+        row(1, app.t('stars_1')),
+        row(0, app.t('stars_record')),
+      ]),
     );
   }
 }
