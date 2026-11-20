@@ -24,7 +24,14 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Copy the project to a neutral folder
+        # Build paths end up inside the compiled app; a neutral folder keeps them free of the repository name.
+        run: |
+          mkdir -p /tmp/tabmath
+          cp -r . /tmp/tabmath/
+
       - name: Generate Android project files
+        working-directory: /tmp/tabmath
         run: |
           flutter --version
           if [ ! -d android ]; then
@@ -40,18 +47,22 @@ jobs:
           grep -n 'applicationId\|android:label' android/app/build.gradle.kts android/app/src/main/AndroidManifest.xml
 
       - name: Use the fixed test signing key
+        working-directory: /tmp/tabmath
         run: |
           # The same key in every build lets a new test version install over the previous one.
           mkdir -p ~/.android
           cp branding/test-signing/debug.keystore ~/.android/debug.keystore
 
       - name: Get packages
+        working-directory: /tmp/tabmath
         run: flutter pub get
 
       - name: Analyze (report only)
+        working-directory: /tmp/tabmath
         run: flutter analyze --no-fatal-infos --no-fatal-warnings || true
 
       - name: Build APK
+        working-directory: /tmp/tabmath
         run: |
           flutter build apk --release --split-per-abi --build-number=${{ github.run_number }}
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk tabmath-test.apk
@@ -60,6 +71,7 @@ jobs:
           ls -la *.apk
 
       - name: Build App Bundle (for Google Play; signed afterwards with the upload key)
+        working-directory: /tmp/tabmath
         run: |
           flutter build appbundle --release --build-number=${{ github.run_number }}
           cp build/app/outputs/bundle/release/app-release.aab tabmath-do-podpisu.aab
@@ -69,11 +81,14 @@ jobs:
           grep -rho 'targetSdk[^,]*' android/app/build.gradle.kts || true
 
       - name: Store screenshots
+        working-directory: /tmp/tabmath
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq fonts-roboto fonts-dejavu-core fonts-dejavu-extra > /dev/null
           flutter test test/screenshots_test.dart || echo "::warning::Screenshot test failed"
           if [ -d screenshots ]; then (cd screenshots && zip -qr ../tabmath-zrzuty-ekranu.zip .); ls -la screenshots/*; fi
+          cp *.apk *.aab "$GITHUB_WORKSPACE"/
+          if [ -f tabmath-zrzuty-ekranu.zip ]; then cp tabmath-zrzuty-ekranu.zip "$GITHUB_WORKSPACE"/; fi
 
       - uses: actions/upload-artifact@v4
         with:
